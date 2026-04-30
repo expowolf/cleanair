@@ -56,3 +56,31 @@ export async function generateCravingSuggestion(args: {
     { role: 'user', content: user },
   ], 250);
 }
+
+// ---- Personalized quit plan ----
+export async function generatePlanWithAI(args: {
+  goal: string;
+  profile: { nicotineType?: string; weeklySpend?: number; whyIQuit?: string; quitMethod?: string; triggers?: string[]; motivationLevel?: number };
+}): Promise<{
+  title: string;
+  whyItMatters: string;
+  tasks: { id: string; title: string; description: string; timeSlot: 'Morning' | 'Midday' | 'Evening'; category: string }[];
+  habitReplacements: { trigger: string; suggestion: string }[];
+  cravingResponsePlan: string[];
+  milestones: { title: string; targetDays: number }[];
+}> {
+  const sys = `You are CleanAIr, an evidence-based quit-coach. Generate a personalized 30-day quit plan as JSON only. Schema:
+{"title":"<= 6 words","whyItMatters":"1-2 sentences citing physiology/neuroscience","tasks":[{"id":"t1","title":"<= 6 words","description":"1 sentence","timeSlot":"Morning|Midday|Evening","category":"exercise|mindfulness|habit|learning|productivity"}],"habitReplacements":[{"trigger":"...","suggestion":"<= 12 words"}],"cravingResponsePlan":["step 1","step 2","step 3"],"milestones":[{"title":"<= 4 words","targetDays":3|7|14|30}]}
+Constraints: exactly 3 tasks (one per timeSlot), 3 habitReplacements, 3 cravingResponsePlan steps, 4 milestones at days 3/7/14/30. Tone: direct, motivating, not preachy.`;
+  const user = `Goal: ${args.goal}
+Substance: ${args.profile.nicotineType ?? 'nicotine'}
+Weekly spend: $${args.profile.weeklySpend ?? 0}
+Why quitting: ${args.profile.whyIQuit ?? 'health'}
+Method: ${args.profile.quitMethod ?? 'Cold Turkey'}
+Triggers: ${args.profile.triggers?.join(', ') ?? 'unspecified'}
+Motivation: ${args.profile.motivationLevel ?? 7}/10`;
+  return aiJSON([
+    { role: 'system', content: sys },
+    { role: 'user', content: user },
+  ], 1200);
+}

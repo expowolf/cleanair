@@ -1,4 +1,5 @@
 import { UserProfile, QuitPlan, DailyTask } from "../types";
+import { generatePlanWithAI, isAIAvailable } from "./aiService";
 
 const GOAL_TEMPLATES: Record<string, any> = {
   'Run a 5k': {
@@ -49,19 +50,58 @@ const GOAL_TEMPLATES: Record<string, any> = {
 };
 
 export async function generatePersonalizedPlan(
-  profile: UserProfile, 
-  specificGoal?: string, 
+  profile: UserProfile,
+  specificGoal?: string,
   goalContext?: { level: string; availability: string; motivation: string; answers: Record<string, string> }
 ): Promise<QuitPlan> {
-  // Simulate network latency for a polished feel
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  const goal = specificGoal || 'General Cessation';
 
+  // Try AI first; fall back to static template if unavailable or fails.
+  if (isAIAvailable()) {
+    try {
+      const ai = await generatePlanWithAI({
+        goal,
+        profile: {
+          nicotineType: profile.nicotineType,
+          weeklySpend: profile.weeklySpend,
+          whyIQuit: profile.whyIQuit,
+          quitMethod: profile.quitMethod,
+          triggers: profile.triggers,
+          motivationLevel: profile.motivationLevel,
+        },
+      });
+      return {
+        userId: profile.uid,
+        generatedAt: new Date().toISOString(),
+        goal,
+        goalSummary: { title: ai.title, whyItMatters: ai.whyItMatters },
+        weeklyStructure: [
+          { week: 1, milestone: 'Stabilization & Habit Mapping' },
+          { week: 2, milestone: 'Active Engagement & Load Increase' },
+          { week: 3, milestone: 'Recovery Testing' },
+          { week: 4, milestone: 'Peak Integration' },
+        ],
+        tasks: ai.tasks.map((t) => ({ ...t, completed: false } as DailyTask)),
+        habitReplacements: ai.habitReplacements,
+        cravingResponsePlan: ai.cravingResponsePlan,
+        progressSystem: { metric: 'Protocol Adherence', description: 'Percentage of tasks completed without deviation.' },
+        milestones: ai.milestones.map((m) => ({ ...m, achieved: false })),
+        status: 'active',
+        goalContext: goalContext || null,
+      } as QuitPlan;
+    } catch (e) {
+      console.error('AI plan generation failed, using template fallback', e);
+    }
+  }
+
+  // Fallback: static template
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   const template = GOAL_TEMPLATES[specificGoal as string] || GOAL_TEMPLATES['generic'];
-  
+
   return {
     userId: profile.uid,
     generatedAt: new Date().toISOString(),
-    goal: specificGoal || 'General Cessation',
+    goal,
     goalSummary: {
       title: template.title,
       whyItMatters: template.whyItMatters
@@ -83,9 +123,9 @@ export async function generatePersonalizedPlan(
       'Exhale completely and hold for 4 seconds',
       'Recall your Primary Protocol Anchor'
     ],
-    progressSystem: { 
-      metric: 'Protocol Adherence', 
-      description: 'Percentage of tasks completed without deviation.' 
+    progressSystem: {
+      metric: 'Protocol Adherence',
+      description: 'Percentage of tasks completed without deviation.'
     },
     milestones: template.milestones.map((m: any) => ({ ...m, achieved: false })),
     status: 'active',

@@ -43,6 +43,12 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Hydrate from localStorage immediately so the plan shows even if Firestore is blocked.
+    try {
+      const cached = localStorage.getItem(`plan:${auth.currentUser.uid}`);
+      if (cached) { setPlan(JSON.parse(cached)); setLoading(false); }
+    } catch {}
+
     // Bound the loading state so the UI renders even if Firestore never replies.
     const fallback = setTimeout(() => setLoading(false), 4000);
 
@@ -69,7 +75,17 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
     setGenerating(true);
     try {
       const newPlan = await generatePersonalizedPlan(profile, specificGoal, context);
-      await setDoc(doc(db, 'plans', auth.currentUser.uid), cleanObject(newPlan));
+      // Persist locally first so it survives even if Firestore is blocked.
+      try { localStorage.setItem(`plan:${auth.currentUser.uid}`, JSON.stringify(newPlan)); } catch {}
+      // Best-effort Firestore write with 6s timeout.
+      try {
+        await Promise.race([
+          setDoc(doc(db, 'plans', auth.currentUser.uid), cleanObject(newPlan)),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+        ]);
+      } catch (writeErr) {
+        console.warn('Plan Firestore write failed, using local copy', writeErr);
+      }
       setPlan(newPlan);
       setShowGoalInput(false);
     } catch (error) {
