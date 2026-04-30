@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Check, Star, Flame, ThumbsUp, ThumbsDown, Bookmark, BookmarkCheck, Play, Pause, ChevronRight, Wind, Heart, Brain, Zap, Volume2, VolumeX } from 'lucide-react';
 import { db, auth } from '../firebase';
@@ -215,12 +216,12 @@ export default function CraveButton() {
       </button>
 
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && createPortal(
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-background backdrop-blur-3xl flex flex-col items-center justify-center p-8 overflow-hidden"
+            className="fixed inset-0 z-[9999] bg-background backdrop-blur-3xl flex flex-col items-center justify-center p-8 overflow-hidden"
           >
             {/* Elegant Header */}
             <header className="absolute top-0 left-0 right-0 p-10 flex justify-between items-start">
@@ -447,7 +448,8 @@ export default function CraveButton() {
                 </motion.div>
               )}
             </div>
-          </motion.div>
+          </motion.div>,
+          document.body
         )}
       </AnimatePresence>
     </>
