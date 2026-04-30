@@ -7,6 +7,7 @@ import { handleFirestoreError, cleanObject } from '../lib/firestore';
 import { OperationType, UserProfile, CravingEntry } from '../types';
 import { LungsIcon } from './Branding';
 import { unlockAchievement } from '../services/achievementService';
+import { generateCravingSuggestion, isAIAvailable } from '../services/aiService';
 
 const BREATHING_PHASES = [
   { text: 'Inhale', duration: 4, action: 'Focus on your nose' },
@@ -112,10 +113,27 @@ export default function CraveButton() {
     setPhaseTimeLeft(BREATHING_PHASES[0].duration);
     setView('breathing');
     speak("Prepare to breathe. Inhale.");
-    
-    // Pick static suggestion
-    const randomIdx = Math.floor(Math.random() * STATIC_SUGGESTIONS.length);
-    setCurrentSuggestion(STATIC_SUGGESTIONS[randomIdx]);
+
+    // Get suggestion from AI; fall back to static if AI unavailable or fails.
+    setIsLoadingSuggestion(true);
+    setCurrentSuggestion(null);
+    if (isAIAvailable()) {
+      generateCravingSuggestion({
+        intensity,
+        trigger: selectedTrigger,
+        nicotineType: profile?.nicotineType,
+      })
+        .then((s) => setCurrentSuggestion(s))
+        .catch(() => {
+          const idx = Math.floor(Math.random() * STATIC_SUGGESTIONS.length);
+          setCurrentSuggestion(STATIC_SUGGESTIONS[idx]);
+        })
+        .finally(() => setIsLoadingSuggestion(false));
+    } else {
+      const idx = Math.floor(Math.random() * STATIC_SUGGESTIONS.length);
+      setCurrentSuggestion(STATIC_SUGGESTIONS[idx]);
+      setIsLoadingSuggestion(false);
+    }
   };
 
   const logCrave = async (overcome: boolean) => {

@@ -154,11 +154,23 @@ export default function App() {
   };
 
   const fetchProfile = async (u: User) => {
+    // Read localStorage first so users get into the app immediately even when
+    // Firestore reads/writes are blocked by rules.
+    try {
+      const cached = localStorage.getItem(`profile:${u.id}`);
+      if (cached) setProfile(JSON.parse(cached) as UserProfile);
+    } catch {}
+
     try {
       const docRef = doc(db, 'users', u.id);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setProfile(docSnap.data() as UserProfile);
+      const docSnap = await Promise.race([
+        getDoc(docRef),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+      ]);
+      if (docSnap && (docSnap as any).exists?.()) {
+        const data = (docSnap as any).data() as UserProfile;
+        setProfile(data);
+        try { localStorage.setItem(`profile:${u.id}`, JSON.stringify(data)); } catch {}
       }
     } catch (err) {
       console.error('Fetch profile failed', err);

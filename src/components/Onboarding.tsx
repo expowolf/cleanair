@@ -44,14 +44,25 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       onboardingComplete: true,
     } as UserProfile;
 
+    // Always persist to localStorage so user can enter the app even if the
+    // remote write fails (e.g. Firestore rules reject Supabase-issued auth).
     try {
-      await setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile));
-      onComplete(finalProfile);
+      localStorage.setItem(`profile:${auth.currentUser.uid}`, JSON.stringify(finalProfile));
+    } catch {}
+
+    // Best-effort sync to Firestore with a 6s timeout so we don't hang forever.
+    try {
+      const write = setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile));
+      await Promise.race([
+        write,
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+      ]);
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `users/${auth.currentUser.uid}`);
-      setError('Failed to save profile. Check your internet connection and try again.');
-      setLoading(false);
+      // Don't block — proceed with local profile.
     }
+
+    onComplete(finalProfile);
   };
 
   const renderStep = () => {
