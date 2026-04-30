@@ -43,12 +43,14 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Bound the loading state so the UI renders even if Firestore never replies.
+    const fallback = setTimeout(() => setLoading(false), 4000);
+
     const unsubscribe = onSnapshot(doc(db, 'plans', auth.currentUser.uid), (docSnap) => {
       if (docSnap.exists()) {
         const planData = docSnap.data() as IQuitPlan;
         setPlan(planData);
-        
-        // If plan is in 'adjusting' status, automatically regenerate it
+
         if (planData.status === 'adjusting' && !generating) {
           handleGeneratePlan();
         }
@@ -59,7 +61,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => { clearTimeout(fallback); unsubscribe(); };
   }, []);
 
   const handleGeneratePlan = async (specificGoal?: string, context?: any) => {

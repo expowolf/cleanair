@@ -75,13 +75,16 @@ export default function Community({ profile }: CommunityProps) {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Render even if Firestore never replies.
+    const fallback = setTimeout(() => setLoading(false), 4000);
+
     // Listen to posts
     const qPosts = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(50));
     const unsubPosts = onSnapshot(qPosts, (snapshot) => {
       const newPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
       setPosts(newPosts);
       setLoading(false);
-    }, (error) => handleFirestoreError(error, OperationType.LIST, 'posts'));
+    }, (error) => { handleFirestoreError(error, OperationType.LIST, 'posts'); setLoading(false); });
 
     // Listen to chats
     const qChats = query(
@@ -95,6 +98,7 @@ export default function Community({ profile }: CommunityProps) {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'chats'));
 
     return () => {
+      clearTimeout(fallback);
       unsubPosts();
       unsubChats();
     };

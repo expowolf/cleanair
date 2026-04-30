@@ -26,8 +26,8 @@ const STATIC_SUGGESTIONS = [
 
 export default function CraveButton() {
   const [isOpen, setIsOpen] = useState(false);
-  const [view, setView] = useState<'intensity' | 'trigger' | 'breathing' | 'suggestion' | 'feedback'>('intensity');
-  const [intensity, setIntensity] = useState(3);
+  const [view, setView] = useState<'trigger' | 'breathing' | 'suggestion' | 'feedback'>('trigger');
+  const [intensity] = useState(3);
   const [selectedTrigger, setSelectedTrigger] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
   const [totalDuration, setTotalDuration] = useState(30); // Fixed 30s
@@ -196,8 +196,7 @@ export default function CraveButton() {
   };
 
   const resetState = () => {
-    setView('intensity');
-    setIntensity(3);
+    setView('trigger');
     setSelectedTrigger(null);
     setFeedback(null);
     setIsSaved(false);
@@ -253,44 +252,7 @@ export default function CraveButton() {
             <div className="w-full max-w-lg flex flex-col items-center">
               
               {/* View: Intensity */}
-              {view === 'intensity' && (
-                <motion.div 
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  className="flex flex-col items-center w-full"
-                >
-                  <h2 className="text-4xl font-extrabold text-charcoal mb-4 text-center tracking-tight">Rate the urge</h2>
-                  <p className="text-gray-400 text-center mb-16 max-w-xs font-medium">Be honest with yourself. We will adjust the level of coaching to help you win.</p>
-                  
-                  <div className="flex items-end justify-between w-full mb-16 px-4">
-                    {[1, 2, 3, 4, 5].map((val) => (
-                      <button
-                        key={val}
-                        onClick={() => {
-                          setIntensity(val);
-                          vibrate(20);
-                        }}
-                        className="group flex flex-col items-center gap-4 relative"
-                      >
-                        <div className={`
-                          w-14 transition-all duration-500 rounded-2xl flex items-center justify-center
-                          ${intensity === val ? 'h-14 bg-charcoal text-white shadow-2xl' : 'h-12 bg-white text-gray-300 hover:text-gray-500 border border-gray-100'}
-                        `}>
-                          <span className="text-lg font-black">{val}</span>
-                        </div>
-                        <div className={`h-1 w-1 rounded-full transition-all duration-300 ${intensity === val ? 'bg-orange scale-150' : 'bg-transparent'}`} />
-                      </button>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => setView('trigger')}
-                    className="w-full py-6 bg-charcoal text-white rounded-3xl font-bold text-lg card-shadow hover:bg-black transition-all active:scale-95"
-                  >
-                    Continue
-                  </button>
-                </motion.div>
-              )}
+              {/* Intensity step removed: open directly to trigger selection. */}
 
               {/* View: Trigger */}
               {view === 'trigger' && (
