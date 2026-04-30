@@ -1,0 +1,280 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user nicotine cessation plan and profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "nicotineType": { "type": "string", "enum": ["Vape", "Cigarettes", "Both", "Other"] },
+        "usageHabits": { "type": "string" },
+        "triggers": { "type": "array", "items": { "type": "string" } },
+        "quitMethod": { "type": "string", "enum": ["Cold Turkey", "Gradual Reduction"] },
+        "quitDate": { "type": "string", "format": "date-time" },
+        "weeklySpend": { "type": "number" },
+        "whyIQuit": { "type": "string" },
+        "motivationLevel": { "type": "number" },
+        "routineStyle": { "type": "string", "enum": ["Strict", "Flexible"] },
+        "onboardingComplete": { "type": "boolean" },
+        "nicotineReplacement": { "type": "string" },
+        "otherProducts": { "type": "string" },
+        "lifestyleInfo": { "type": "string" },
+        "freeTime": { "type": "string" },
+        "goals": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "quitMethod", "quitDate"]
+    },
+    "Post": {
+      "title": "Community Post",
+      "description": "A post in the community feed.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "commentCount": { "type": "number" },
+        "repostCount": { "type": "number" },
+        "repostedFrom": { "type": "string" }
+      },
+      "required": ["userId", "authorName", "content", "createdAt", "likes"]
+    },
+    "Comment": {
+      "title": "Post Comment",
+      "description": "A comment on a community post.",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "userId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "userId", "authorName", "content", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat Session",
+      "description": "A DM or Group Chat session.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["dm", "group"] },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "groupType": { "type": "string", "enum": ["support", "fitness", "productivity", "learning", "other"] },
+        "participantCount": { "type": "number" }
+      },
+      "required": ["type", "participants", "createdAt"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "A message within a chat session.",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "readBy": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["chatId", "senderId", "senderName", "content", "createdAt", "readBy"]
+    },
+    "Report": {
+      "title": "Moderation Report",
+      "description": "A report for a post, comment, or user.",
+      "type": "object",
+      "properties": {
+        "reporterId": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["post", "comment", "user"] },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "resolved"] }
+      },
+      "required": ["reporterId", "targetId", "targetType", "reason", "createdAt", "status"]
+    },
+    "CravingEntry": {
+      "title": "Craving Entry",
+      "description": "Logs a single craving event.",
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "triggerType": { "type": "string" },
+        "intensity": { "type": "number" },
+        "actionTaken": { "type": "string" }
+      },
+      "required": ["timestamp"]
+    },
+    "Preference": {
+      "title": "User Preferences",
+      "description": "Stores user-specific app preferences.",
+      "type": "object",
+      "properties": {
+        "replacementPreferences": { "type": "array", "items": { "type": "string" } },
+        "notificationSettings": { "type": "object" }
+      }
+    },
+    "ProgressSnapshot": {
+      "title": "Progress Snapshot",
+      "description": "Stores snapshots of user progress for stats.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "streakData": { "type": "object" },
+        "goalsCompleted": { "type": "number" },
+        "moneySaved": { "type": "number" },
+        "cravingsResisted": { "type": "number" },
+        "cravingsTotal": { "type": "number" },
+        "tasksCompletedTotal": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "podsAvoided": { "type": "number" },
+        "timeSavedMinutes": { "type": "number" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "streakData", "goalsCompleted", "moneySaved", "cravingsResisted", "cravingsTotal", "tasksCompletedTotal", "longestStreak", "lastUpdated"]
+    },
+    "QuitPlan": {
+      "title": "Quit Plan",
+      "description": "Generated personalized quit plan.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "goal": { "type": ["string", "null"] },
+        "goalSummary": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "whyItMatters": { "type": "string" }
+          },
+          "required": ["title", "whyItMatters"]
+        },
+        "weeklyStructure": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "week": { "type": "integer" },
+              "milestone": { "type": "string" }
+            },
+            "required": ["week", "milestone"]
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "category": { "type": "string" },
+              "timeSlot": { "type": "string", "enum": ["Morning", "Midday", "Evening"] },
+              "completed": { "type": "boolean" },
+              "completedAt": { "type": ["string", "null"], "format": "date-time" },
+              "feedback": { "type": ["string", "null"], "enum": ["too_easy", "just_right", "too_hard"] }
+            },
+            "required": ["id", "title", "description", "category", "timeSlot", "completed"]
+          }
+        },
+        "habitReplacements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "trigger": { "type": "string" },
+              "suggestion": { "type": "string" }
+            },
+            "required": ["trigger", "suggestion"]
+          }
+        },
+        "cravingResponsePlan": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "progressSystem": {
+          "type": "object",
+          "properties": {
+            "metric": { "type": "string" },
+            "description": { "type": "string" }
+          },
+          "required": ["metric", "description"]
+        },
+        "milestones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "targetDays": { "type": "integer" },
+              "achieved": { "type": "boolean" }
+            },
+            "required": ["title", "targetDays", "achieved"]
+          }
+        },
+        "status": { "type": "string", "enum": ["active", "completed", "adjusting"] },
+        "goalContext": { "type": ["object", "null"] }
+      },
+      "required": ["userId", "generatedAt", "goalSummary", "weeklyStructure", "tasks", "habitReplacements", "cravingResponsePlan", "progressSystem", "milestones", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "UserProfile",
+      "description": "User profile and quit plan."
+    },
+    "/cravings/{uid}/entries/{entryId}": {
+      "schema": "CravingEntry",
+      "description": "Individual craving logs for a user."
+    },
+    "/preferences/{uid}": {
+      "schema": "Preference",
+      "description": "User app preferences."
+    },
+    "/progress/{uid}": {
+      "schema": "ProgressSnapshot",
+      "description": "User progress and achievements."
+    },
+    "/plans/{uid}": {
+      "schema": "QuitPlan",
+      "description": "Personalized recovery plan for a user."
+    },
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Community posts."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on posts."
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "DM and Group Chat sessions."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages in chats."
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "Moderation reports."
+    },
+    "/users/{uid}/blocks/{blockId}": {
+      "schema": "object",
+      "description": "User blocks."
+    }
+  }
+}

@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Space Grotesk", ui-monospace, SFMono-Regular, monospace;
+  --color-background: #FDFDFD;
+  --color-primary: #7DB87A;
+  --color-sage: #7DB87A;
+  --color-orange: #E8916A;
+  --color-secondary: #E8916A;
+  --color-blue: #A8C8E8;
+  --color-charcoal: #1A1A1A;
+  --color-card-bg: #FFFFFF;
+  --color-outer-bg: #F0F0F0;
+}
+
+@layer base {
+  body {
+    @apply bg-outer-bg text-charcoal font-sans min-h-screen antialiased;
+  }
+}
+
+.card-shadow {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+}
+
+.main-shadow {
+  box-shadow: 0 20px 40px -10px rgba(125, 184, 122, 0.3);
+}
+
+.crave-shadow {
+  box-shadow: 0 15px 30px -5px rgba(232, 145, 106, 0.4);
+}
+
+.glow-hot {
+  animation: glow-hot 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes glow-hot {
+  0% { box-shadow: 0 0 5px #E8916A, 0 0 10px rgba(232, 145, 106, 0.2); transform: scale(1); }
+  50% { box-shadow: 0 0 25px #E8916A, 0 0 45px rgba(232, 145, 106, 0.4); transform: scale(1.08); }
+  100% { box-shadow: 0 0 5px #E8916A, 0 0 10px rgba(232, 145, 106, 0.2); transform: scale(1); }
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+
