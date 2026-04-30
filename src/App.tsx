@@ -104,20 +104,21 @@ export default function App() {
     setLoading(true);
     try {
       if (authMode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: { full_name: name },
+          },
+        });
         if (error) throw error;
-        if (data.user) {
-          const initialProfile: Partial<UserProfile> = {
-            uid: data.user.id,
-            email,
-            displayName: name,
-            onboardingComplete: false,
-          };
-          await setDoc(doc(db, 'users', data.user.id), cleanObject(initialProfile));
-        }
         if (!data.session) {
-          setAuthError('Check your email to confirm your account.');
+          setAuthError('Check your email to confirm your account, then sign in.');
         }
+        // Note: profile is created by Onboarding once the user is authenticated.
+        // We don't write to Firestore here because the Supabase session does not
+        // satisfy Firestore security rules.
       } else if (authMode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
