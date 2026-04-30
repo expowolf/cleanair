@@ -25,7 +25,7 @@ import {
 import { UserProfile, ProgressSnapshot, OperationType, NicotineType, UsageHabits, Trigger, QuitMethod } from '../types';
 import { db, auth } from '../firebase';
 import { doc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { signOut, updateEmail, updatePassword, deleteUser, reauthenticateWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { supabase } from '../lib/supabase';
 import { handleFirestoreError, cleanObject } from '../lib/firestore';
 import { format } from 'date-fns';
 
@@ -94,7 +94,7 @@ export default function Dashboard({ profile }: DashboardProps) {
     }
   };
 
-  const handleLogout = () => signOut(auth);
+  const handleLogout = () => supabase.auth.signOut();
 
   const handleUpdateProfile = async () => {
     if (!auth.currentUser) return;
@@ -119,10 +119,12 @@ export default function Dashboard({ profile }: DashboardProps) {
     setLoading(true);
     try {
       if (email !== profile.email) {
-        await updateEmail(auth.currentUser, email);
+        const { error } = await supabase.auth.updateUser({ email });
+        if (error) throw error;
       }
       if (newPassword) {
-        await updatePassword(auth.currentUser, newPassword);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
       }
       await updateDoc(doc(db, 'users', auth.currentUser.uid), { email });
       setMessage({ type: 'success', text: 'Account updated successfully!' });
@@ -172,13 +174,10 @@ export default function Dashboard({ profile }: DashboardProps) {
       await deleteDoc(doc(db, 'users', uid));
       await deleteDoc(doc(db, 'plans', uid));
       await deleteDoc(doc(db, 'progress', uid));
-      await deleteUser(auth.currentUser);
+      await supabase.auth.signOut();
+      setMessage({ type: 'success', text: 'Account data deleted. Contact support to fully remove your auth record.' });
     } catch (error: any) {
-      if (error.code === 'auth/requires-recent-login') {
-        alert("Please log out and log back in to delete your account.");
-      } else {
-        setMessage({ type: 'error', text: error.message });
-      }
+      setMessage({ type: 'error', text: error.message });
     } finally {
       setLoading(false);
     }
