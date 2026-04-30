@@ -1,0 +1,285 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - nicotineType: string (optional)
+    //   - usageHabits: string (optional)
+    //   - triggers: list (optional)
+    //   - quitMethod: string (required)
+    //   - quitDate: string (required, ISO 8601)
+    //   - weeklySpend: number (optional)
+    //   - whyIQuit: string (optional)
+    //   - motivationLevel: number (optional)
+    //   - routineStyle: string (optional, Strict/Flexible)
+    //   - onboardingComplete: bool (optional)
+    //
+    // Collection: plans
+    // Document ID: {uid}
+    // Fields:
+    //   - userId: string (required)
+    //   - generatedAt: string (required, ISO 8601)
+    //   - goal: string (optional)
+    //   - goalSummary: map (required)
+    //   - weeklyStructure: list (required)
+    //   - tasks: list (required)
+    //   - habitReplacements: list (required)
+    //   - cravingResponsePlan: list (required)
+    //   - progressSystem: map (required)
+    //   - milestones: list (required)
+    //   - status: string (required)
+    //
+    // ===============================================================
+
+    // Collection: progress
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - streakData: map (required)
+    //   - goalsCompleted: number (required)
+    //   - moneySaved: number (required)
+    //   - cravingsResisted: number (required)
+    //   - cravingsTotal: number (required)
+    //   - tasksCompletedTotal: number (required)
+    //   - longestStreak: number (required)
+    //   - lastUpdated: string (required, ISO 8601)
+    //
+    // Collection: posts
+    // Document ID: {postId}
+    // Fields:
+    //   - userId: string (required)
+    //   - authorName: string (required)
+    //   - authorPhoto: string (optional)
+    //   - content: string (required)
+    //   - imageUrl: string (optional)
+    //   - createdAt: string (required, ISO 8601)
+    //   - likes: list (required)
+    //   - commentCount: number (required)
+    //   - repostCount: number (required)
+    //   - repostedFrom: string (optional)
+    //
+    // Collection: chats
+    // Document ID: {chatId}
+    // Fields:
+    //   - type: string (required, dm/group)
+    //   - participants: list (required)
+    //   - name: string (optional)
+    //   - description: string (optional)
+    //   - ownerId: string (optional)
+    //   - lastMessage: string (optional)
+    //   - lastMessageAt: string (optional, ISO 8601)
+    //   - createdAt: string (required, ISO 8601)
+    //
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "oscardoopuppy@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'quitMethod', 'quitDate']) &&
+             data.uid == request.auth.uid &&
+             data.quitMethod in ['Cold Turkey', 'Gradual Reduction'] &&
+             isValidDateString(data.quitDate) &&
+             (!('weeklySpend' in data) || data.weeklySpend is number) &&
+             (!('whyIQuit' in data) || (data.whyIQuit is string && data.whyIQuit.size() < 1000)) &&
+             (!('motivationLevel' in data) || (data.motivationLevel is number && data.motivationLevel >= 1 && data.motivationLevel <= 10)) &&
+             (!('routineStyle' in data) || data.routineStyle in ['Strict', 'Flexible']);
+    }
+
+    function isValidCraving(data) {
+      return data.keys().hasAll(['timestamp']) &&
+             isValidDateString(data.timestamp) &&
+             (!('intensity' in data) || (data.intensity is number && data.intensity >= 1 && data.intensity <= 5)) &&
+             (!('triggerType' in data) || (data.triggerType is string && data.triggerType.size() < 100)) &&
+             (!('actionTaken' in data) || (data.actionTaken is string && data.actionTaken.size() < 500));
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['userId', 'generatedAt', 'goalSummary', 'weeklyStructure', 'tasks', 'habitReplacements', 'cravingResponsePlan', 'progressSystem', 'milestones', 'status']) &&
+             data.userId == request.auth.uid &&
+             isValidDateString(data.generatedAt) &&
+             data.goalSummary is map &&
+             data.weeklyStructure is list &&
+             data.tasks is list &&
+             data.habitReplacements is list &&
+             data.cravingResponsePlan is list &&
+             data.progressSystem is map &&
+             data.milestones is list &&
+             data.status in ['active', 'completed', 'adjusting'];
+    }
+
+    function isValidProgress(data) {
+      return data.keys().hasAll(['uid', 'streakData', 'goalsCompleted', 'moneySaved', 'cravingsResisted', 'cravingsTotal', 'tasksCompletedTotal', 'longestStreak', 'lastUpdated']) &&
+             data.uid == request.auth.uid &&
+             data.streakData is map &&
+             data.goalsCompleted is number &&
+             data.moneySaved is number &&
+             data.cravingsResisted is number &&
+             data.cravingsTotal is number &&
+             data.tasksCompletedTotal is number &&
+             data.longestStreak is number &&
+             isValidDateString(data.lastUpdated);
+    }
+
+    function isValidPost(data) {
+      return data.keys().hasAll(['userId', 'authorName', 'content', 'createdAt', 'likes', 'commentCount', 'repostCount']) &&
+             data.userId == request.auth.uid &&
+             data.authorName is string && data.authorName.size() < 100 &&
+             data.content is string && data.content.size() < 2000 &&
+             isValidDateString(data.createdAt) &&
+             data.likes is list &&
+             data.commentCount is number &&
+             data.repostCount is number;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['postId', 'userId', 'authorName', 'content', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.authorName is string && data.authorName.size() < 100 &&
+             data.content is string && data.content.size() < 1000 &&
+             isValidDateString(data.createdAt);
+    }
+
+    function isValidChat(data) {
+      return data.keys().hasAll(['type', 'participants', 'createdAt']) &&
+             data.type in ['dm', 'group'] &&
+             data.participants is list &&
+             data.participants.size() >= 1 &&
+             request.auth.uid in data.participants &&
+             isValidDateString(data.createdAt) &&
+             (!('participantCount' in data) || data.participantCount is number) &&
+             (!('ownerId' in data) || data.ownerId is string);
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['chatId', 'senderId', 'senderName', 'content', 'createdAt', 'readBy']) &&
+             data.senderId == request.auth.uid &&
+             data.content is string && data.content.size() < 5000 &&
+             isValidDateString(data.createdAt) &&
+             data.readBy is list;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['reporterId', 'targetId', 'targetType', 'reason', 'createdAt', 'status']) &&
+             data.reporterId == request.auth.uid &&
+             data.targetType in ['post', 'comment', 'user'] &&
+             data.reason is string && data.reason.size() < 1000 &&
+             isValidDateString(data.createdAt) &&
+             data.status == 'pending';
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /cravings/{userId}/entries/{entryId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidCraving(request.resource.data);
+      allow update: if isOwner(userId) && isValidCraving(request.resource.data);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    match /preferences/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /progress/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidProgress(request.resource.data);
+      allow update: if isOwner(userId) && isValidProgress(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /plans/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidPlan(request.resource.data);
+      allow update: if isOwner(userId) && isValidPlan(request.resource.data);
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidPost(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (request.auth.uid == resource.data.userId && isValidPost(request.resource.data)) ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'commentCount', 'repostCount']))
+      );
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && isValidComment(request.resource.data);
+        allow delete: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && (
+        request.auth.uid in resource.data.participants || 
+        resource.data.type == 'group' ||
+        (resource.data.ownerId == request.auth.uid)
+      );
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      allow update: if isAuthenticated() && (
+        request.auth.uid in resource.data.participants ||
+        (resource.data.type == 'group' && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'participantCount']) &&
+         request.auth.uid in request.resource.data.participants)
+      );
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && isValidMessage(request.resource.data);
+      }
+    }
+
+    match /reports/{reportId} {
+      allow create: if isAuthenticated() && isValidReport(request.resource.data);
+      allow read: if isAdmin();
+    }
+
+    match /users/{userId}/blocks/{blockId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
