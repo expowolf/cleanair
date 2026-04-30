@@ -215,8 +215,9 @@ export default function CraveButton() {
         <Flame size={32} fill="currentColor" />
       </button>
 
-      <AnimatePresence>
-        {isOpen && createPortal(
+      {createPortal(
+        <AnimatePresence>
+          {isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -448,10 +449,11 @@ export default function CraveButton() {
                 </motion.div>
               )}
             </div>
-          </motion.div>,
-          document.body
-        )}
-      </AnimatePresence>
+          </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
