@@ -14,6 +14,8 @@ interface OnboardingProps {
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Partial<UserProfile>>({
     triggers: [],
     quitMethod: 'Cold Turkey',
@@ -31,7 +33,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleComplete = async () => {
     if (!auth.currentUser) return;
-    
+
+    setLoading(true);
+    setError(null);
+
     const finalProfile: UserProfile = {
       ...profile,
       uid: auth.currentUser.uid,
@@ -42,8 +47,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     try {
       await setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile));
       onComplete(finalProfile);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${auth.currentUser.uid}`);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `users/${auth.currentUser.uid}`);
+      setError('Failed to save profile. Check your internet connection and try again.');
+      setLoading(false);
     }
   };
 
@@ -301,12 +308,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <span className="text-[8px] font-black uppercase tracking-widest">Protocol Anchor Registered</span>
               </div>
             </div>
+            {error && <p className="text-[10px] text-red-500 font-black uppercase mt-4 mb-4">{error}</p>}
             <button
               onClick={handleComplete}
-              disabled={!profile.whyIQuit}
-              className="mt-8 w-full py-6 bg-sage text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] shadow-xl shadow-sage/20 active:scale-95 transition-all disabled:opacity-20"
+              disabled={!profile.whyIQuit || loading}
+              className="mt-8 w-full py-6 bg-sage text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] shadow-xl shadow-sage/20 active:scale-95 transition-all disabled:opacity-20 flex items-center justify-center gap-2"
             >
-              Initialize Journey <Check size={20} strokeWidth={3} />
+              {loading ? <span className="animate-spin">⟳</span> : <Check size={20} strokeWidth={3} />}
+              {loading ? 'Initializing...' : 'Initialize Journey'}
             </button>
           </StepWrapper>
         );
