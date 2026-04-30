@@ -101,7 +101,7 @@ export default function CraveButton() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [view, countdown === 0]); 
+  }, [view, countdown]);
 
   const triggerCraveMode = async () => {
     setTotalDuration(30);
@@ -162,14 +162,18 @@ export default function CraveButton() {
     setIsSaved(newSaved);
     vibrate([20, 50]);
 
-    if (newSaved) {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        favoriteStrategies: arrayUnion(currentSuggestion.suggestion)
-      });
-    } else {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        favoriteStrategies: arrayRemove(currentSuggestion.suggestion)
-      });
+    try {
+      if (newSaved) {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          favoriteStrategies: arrayUnion(currentSuggestion.suggestion)
+        });
+      } else {
+        await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+          favoriteStrategies: arrayRemove(currentSuggestion.suggestion)
+        });
+      }
+    } catch {
+      setIsSaved(!newSaved); // revert optimistic update on failure
     }
   };
 

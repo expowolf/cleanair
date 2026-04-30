@@ -305,7 +305,7 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
 }
 
 function PostCard({ post, profile, onReport }: { post: Post, profile: UserProfile, onReport: (id: string, type: 'post' | 'comment' | 'user') => void }) {
-  const isLiked = auth.currentUser ? post.likes.includes(auth.currentUser.uid) : false;
+  const isLiked = auth.currentUser ? (Array.isArray(post.likes) && post.likes.includes(auth.currentUser.uid)) : false;
   const isOwner = auth.currentUser?.uid === post.userId;
 
   const handleLike = async () => {

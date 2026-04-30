@@ -3,24 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import Legal from './Legal';
 import { 
-  User as UserIcon, 
-  Mail, 
-  Lock, 
-  LogOut, 
-  Trash2, 
-  Camera, 
-  ChevronRight, 
-  Settings as SettingsIcon, 
-  Target, 
-  Zap, 
-  Clock, 
+  User as UserIcon,
+  Mail,
+  Lock,
+  LogOut,
+  Trash2,
+  Camera,
+  ChevronRight,
+  Settings as SettingsIcon,
+  Target,
+  Zap,
+  Clock,
   DollarSign,
   Shield,
   Bell,
   Check,
   ArrowLeft,
   X,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { UserProfile, ProgressSnapshot, OperationType, NicotineType, UsageHabits, Trigger, QuitMethod } from '../types';
 import { db, auth } from '../firebase';
