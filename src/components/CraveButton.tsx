@@ -138,41 +138,68 @@ export default function CraveButton() {
   };
 
   const logCrave = async (overcome: boolean) => {
-    if (!auth.currentUser) return;
-    try {
-      const entry: CravingEntry = {
-        timestamp: new Date().toISOString(),
-        intensity,
-        triggerType: selectedTrigger || 'Unknown',
-        suggestedAction: currentSuggestion?.suggestion,
-        feedback: feedback || undefined,
-        isSaved,
-        actionTaken: overcome ? 'overcome' : 'relapsed'
-      };
-
-      await addDoc(collection(db, 'cravings', auth.currentUser.uid, 'entries'), cleanObject(entry));
-      
-      if (overcome) {
-        await unlockAchievement('resist_1');
-      }
-
-      // Update progress
-      const progressRef = doc(db, 'progress', auth.currentUser.uid);
-      const progressSnap = await getDoc(progressRef);
-      if (progressSnap.exists()) {
-        const data = progressSnap.data();
-        await updateDoc(progressRef, {
-          cravingsResisted: overcome ? (data.cravingsResisted || 0) + 1 : (data.cravingsResisted || 0),
-          cravingsTotal: (data.cravingsTotal || 0) + 1,
-          lastUpdated: new Date().toISOString()
-        });
-      }
-
+    if (!auth.currentUser) {
       setIsOpen(false);
       resetState();
-    } catch (err) {
-      console.error("Log failed", err);
+      return;
     }
+    const uid = auth.currentUser.uid;
+    const entry: CravingEntry = {
+      timestamp: new Date().toISOString(),
+      intensity,
+      triggerType: selectedTrigger || 'Unknown',
+      suggestedAction: currentSuggestion?.suggestion,
+      feedback: feedback || undefined,
+      isSaved,
+      actionTaken: overcome ? 'overcome' : 'relapsed'
+    };
+
+    // Persist locally first so the log is never lost.
+    try {
+      const key = `cravings:${uid}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      existing.push(entry);
+      localStorage.setItem(key, JSON.stringify(existing));
+
+      const progKey = `progress:${uid}`;
+      const prog = JSON.parse(localStorage.getItem(progKey) || '{}');
+      prog.cravingsTotal = (prog.cravingsTotal || 0) + 1;
+      if (overcome) prog.cravingsResisted = (prog.cravingsResisted || 0) + 1;
+      prog.lastUpdated = new Date().toISOString();
+      localStorage.setItem(progKey, JSON.stringify(prog));
+    } catch {}
+
+    // Close UI immediately — Firestore writes are best-effort in background.
+    setIsOpen(false);
+    resetState();
+
+    // Best-effort Firestore sync with timeout; never blocks UI.
+    const timeout = (ms: number) => new Promise<void>((_, rej) => setTimeout(() => rej(new Error('timeout')), ms));
+    Promise.race([
+      (async () => {
+        await addDoc(collection(db, 'cravings', uid, 'entries'), cleanObject(entry));
+        if (overcome) {
+          await unlockAchievement('resist_1');
+        }
+        const progressRef = doc(db, 'progress', uid);
+        const progressSnap = await getDoc(progressRef);
+        if (progressSnap.exists()) {
+          const data = progressSnap.data();
+          await updateDoc(progressRef, {
+            cravingsResisted: overcome ? (data.cravingsResisted || 0) + 1 : (data.cravingsResisted || 0),
+            cravingsTotal: (data.cravingsTotal || 0) + 1,
+            lastUpdated: new Date().toISOString()
+          });
+        } else {
+          await setDoc(progressRef, {
+            cravingsResisted: overcome ? 1 : 0,
+            cravingsTotal: 1,
+            lastUpdated: new Date().toISOString()
+          });
+        }
+      })(),
+      timeout(4000),
+    ]).catch((err) => console.warn('Crave log Firestore sync skipped:', err?.message || err));
   };
 
   const toggleSave = async () => {

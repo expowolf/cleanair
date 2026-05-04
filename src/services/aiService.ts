@@ -8,7 +8,7 @@ const apiKey =
 const model =
   (import.meta.env.VITE_OPENROUTER_MODEL as string | undefined) ||
   (typeof process !== 'undefined' && (process as any).env?.OPENROUTER_MODEL) ||
-  'anthropic/claude-sonnet-4-5';
+  'openai/gpt-4o-mini';
 
 export const isAIAvailable = () => !!apiKey;
 
