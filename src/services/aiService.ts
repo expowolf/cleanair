@@ -40,7 +40,21 @@ export async function aiChat(messages: Msg[], opts: { json?: boolean; maxTokens?
 
 export async function aiJSON<T>(messages: Msg[], maxTokens = 800): Promise<T> {
   const text = await aiChat(messages, { json: true, maxTokens });
-  return JSON.parse(text) as T;
+  // Some models wrap JSON in ```json ... ``` fences or include preamble.
+  let cleaned = text.trim();
+  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) cleaned = fence[1].trim();
+  // Extract first { ... } block as last resort
+  if (cleaned[0] !== '{' && cleaned[0] !== '[') {
+    const m = cleaned.match(/[{\[][\s\S]*[}\]]/);
+    if (m) cleaned = m[0];
+  }
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (e) {
+    console.error('aiJSON parse failed. Raw response:', text);
+    throw new Error(`AI returned invalid JSON: ${(e as Error).message}`);
+  }
 }
 
 // ---- Coping suggestion for a craving ----

@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { UserProfile, QuitPlan, DailyTask } from "../types";
 import { generatePlanWithAI, isAIAvailable } from "./aiService";
 
@@ -89,9 +90,13 @@ export async function generatePersonalizedPlan(
         status: 'active',
         goalContext: goalContext || null,
       } as QuitPlan;
-    } catch (e) {
+    } catch (e: any) {
+      const msg = e?.message || String(e);
       console.error('AI plan generation failed, using template fallback', e);
+      toast.error('AI plan failed — using template', { description: msg.slice(0, 140) });
     }
+  } else {
+    toast.warning('AI key missing — using template', { description: 'VITE_OPENROUTER_API_KEY not set in env.' });
   }
 
   // Fallback: static template
