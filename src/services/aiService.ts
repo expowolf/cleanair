@@ -12,6 +12,15 @@ const model =
 
 export const isAIAvailable = () => !!apiKey;
 
+// Visible at startup so the user can confirm the bundle has the key.
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.log(
+    `[CleanAIr/AI] key=${apiKey ? apiKey.slice(0, 10) + '...(' + apiKey.length + ' chars)' : 'MISSING'} model=${model}`
+  );
+  (window as any).__cleanair_ai = { hasKey: !!apiKey, keyPrefix: apiKey.slice(0, 10), model };
+}
+
 type Msg = { role: 'system' | 'user' | 'assistant'; content: string };
 
 export async function aiChat(messages: Msg[], opts: { json?: boolean; maxTokens?: number } = {}): Promise<string> {

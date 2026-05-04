@@ -92,10 +92,12 @@ export async function generatePersonalizedPlan(
       } as QuitPlan;
     } catch (e: any) {
       const msg = e?.message || String(e);
-      console.error('AI plan generation failed, using template fallback', e);
-      toast.error('AI plan failed — using template', { description: msg.slice(0, 140) });
+      console.error('[CleanAIr/AI] plan generation failed', e);
+      if (typeof window !== 'undefined') (window as any).__cleanair_lastAIError = msg;
+      toast.error('AI plan failed — using template', { description: msg.slice(0, 200) });
     }
   } else {
+    if (typeof window !== 'undefined') (window as any).__cleanair_lastAIError = 'API key missing in bundle (VITE_OPENROUTER_API_KEY)';
     toast.warning('AI key missing — using template', { description: 'VITE_OPENROUTER_API_KEY not set in env.' });
   }
 

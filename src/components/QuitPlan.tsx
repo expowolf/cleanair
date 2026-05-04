@@ -35,6 +35,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   const [generating, setGenerating] = useState(false);
   const [showGoalInput, setShowGoalInput] = useState(false);
   const [goalText, setGoalText] = useState("");
+  const [aiDebug, setAiDebug] = useState<string | null>(null);
   
   // Task Help State
   const [helpData, setHelpData] = useState<{ title: string; explanation: string; youtubeLink: string } | null>(null);
@@ -73,8 +74,12 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   const handleGeneratePlan = async (specificGoal?: string, context?: any) => {
     if (!auth.currentUser) return;
     setGenerating(true);
+    setAiDebug(null);
     try {
       const newPlan = await generatePersonalizedPlan(profile, specificGoal, context);
+      const lastErr = (window as any).__cleanair_lastAIError;
+      const aiInfo = (window as any).__cleanair_ai;
+      if (lastErr) setAiDebug(`AI failed: ${lastErr} | key=${aiInfo?.hasKey ? aiInfo.keyPrefix + '...' : 'MISSING'} model=${aiInfo?.model}`);
       // Persist locally first so it survives even if Firestore is blocked.
       try { localStorage.setItem(`plan:${auth.currentUser.uid}`, JSON.stringify(newPlan)); } catch {}
       // Best-effort Firestore write with 6s timeout.
@@ -411,6 +416,13 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
 
   return (
     <div className="flex flex-col gap-8 pb-24 px-6">
+      {aiDebug && (
+        <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-[11px] text-red-700 break-words">
+          <div className="font-bold mb-1">AI debug</div>
+          {aiDebug}
+          <button onClick={() => setAiDebug(null)} className="ml-2 underline">dismiss</button>
+        </div>
+      )}
       <header className="flex justify-between items-center">
         <div className="flex flex-col">
           <h1 className="text-2xl font-bold text-charcoal">Quit Plan</h1>
