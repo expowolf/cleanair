@@ -7,6 +7,7 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName?: string;
+  username?: string;
   photoURL?: string;
   bio?: string;
   nicotineType?: NicotineType;

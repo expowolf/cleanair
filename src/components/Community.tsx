@@ -226,6 +226,93 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
     }
   };
 
+  // Public profile gate
+  const [setupName, setSetupName] = useState(profile.displayName || '');
+  const [setupUsername, setSetupUsername] = useState(profile.username || '');
+  const [setupBio, setSetupBio] = useState(profile.bio || '');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const needsSetup = !profile.username || !profile.displayName;
+
+  const submitPublicProfile = async () => {
+    if (!auth.currentUser) return;
+    const username = setupUsername.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    const displayName = setupName.trim();
+    const bio = setupBio.trim();
+    if (!username || username.length < 3) { alert('Username must be 3+ chars (a-z, 0-9, _)'); return; }
+    if (!displayName) { alert('Display name required'); return; }
+    setSavingProfile(true);
+    const updated = { ...profile, username, displayName, bio };
+    try { localStorage.setItem(`profile:${auth.currentUser.uid}`, JSON.stringify(updated)); } catch {}
+    try {
+      await Promise.race([
+        updateDoc(doc(db, 'users', auth.currentUser.uid), { username, displayName, bio }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]);
+    } catch (e) { console.warn('Public profile sync skipped', e); }
+    // Optimistic local update — parent will pick it up on next snapshot or reload.
+    Object.assign(profile, { username, displayName, bio });
+    setSavingProfile(false);
+  };
+
+  if (needsSetup) {
+    return (
+      <div className="flex flex-col gap-6 p-6 pb-40 w-full">
+        <div className="bg-charcoal p-8 rounded-[40px] text-white">
+          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-sage">Step 1</span>
+          <h2 className="text-3xl font-black tracking-tight mt-3 mb-2">Set up your public profile</h2>
+          <p className="text-white/60 text-sm">Before joining the community, create how others will see you.</p>
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Display Name</span>
+            <input
+              value={setupName}
+              onChange={(e) => setSetupName(e.target.value)}
+              maxLength={40}
+              placeholder="e.g. Alex Quitter"
+              className="bg-white border border-gray-200 rounded-2xl px-5 py-4 text-charcoal font-medium focus:outline-none focus:border-sage"
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Username</span>
+            <div className="flex items-center bg-white border border-gray-200 rounded-2xl px-5 py-4 focus-within:border-sage">
+              <span className="text-gray-400 font-bold mr-1">@</span>
+              <input
+                value={setupUsername}
+                onChange={(e) => setSetupUsername(e.target.value)}
+                maxLength={20}
+                placeholder="alex_q"
+                className="flex-1 bg-transparent text-charcoal font-medium focus:outline-none"
+              />
+            </div>
+            <span className="text-[9px] text-gray-400">3+ chars, letters/numbers/underscore.</span>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Bio (optional)</span>
+            <textarea
+              value={setupBio}
+              onChange={(e) => setSetupBio(e.target.value)}
+              maxLength={160}
+              rows={3}
+              placeholder="Why you're here, what you're working on..."
+              className="bg-white border border-gray-200 rounded-2xl px-5 py-4 text-charcoal font-medium focus:outline-none focus:border-sage resize-none"
+            />
+            <span className="text-[9px] text-gray-400 self-end">{setupBio.length}/160</span>
+          </label>
+
+          <button
+            onClick={submitPublicProfile}
+            disabled={savingProfile}
+            className="w-full py-5 bg-sage text-white rounded-2xl font-black uppercase tracking-widest text-sm disabled:opacity-50 active:scale-95 transition-all mt-2"
+          >
+            {savingProfile ? 'Saving...' : 'Join Community'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-8 p-6 pb-40 w-full">
       {/* Community Status */}
