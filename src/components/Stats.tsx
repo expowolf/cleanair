@@ -121,9 +121,29 @@ export default function Stats({ profile, onNavigate }: StatsProps) {
           <div className="absolute top-0 right-0 w-64 h-64 bg-sage/20 blur-[100px] rounded-full -mr-32 -mt-32 opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
           
           <div className="relative z-10">
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-4 block">Deployment Uptime</span>
-            <div className="text-6xl font-black tracking-tighter mb-2 font-mono">{days}<span className="text-2xl text-white/50">d</span> {String(liveHours).padStart(2,'0')}<span className="text-2xl text-white/50">h</span> {String(liveMins).padStart(2,'0')}<span className="text-2xl text-white/50">m</span> {String(liveSecs).padStart(2,'0')}<span className="text-2xl text-white/50">s</span></div>
-            <div className="text-[10px] font-black uppercase tracking-[0.5em] text-sage">Status: Stable</div>
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-6 block">Vape-Free</span>
+            <div className="flex items-end justify-center gap-3 mb-4 font-mono">
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-black tracking-tight leading-none">{days}</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-white/40 mt-2">Days</span>
+              </div>
+              <span className="text-2xl font-black text-white/20 leading-none pb-3">:</span>
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-black tracking-tight leading-none">{String(liveHours).padStart(2,'0')}</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-white/40 mt-2">Hrs</span>
+              </div>
+              <span className="text-2xl font-black text-white/20 leading-none pb-3">:</span>
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-black tracking-tight leading-none">{String(liveMins).padStart(2,'0')}</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-white/40 mt-2">Min</span>
+              </div>
+              <span className="text-2xl font-black text-white/20 leading-none pb-3">:</span>
+              <div className="flex flex-col items-center">
+                <span className="text-4xl font-black tracking-tight leading-none text-sage">{String(liveSecs).padStart(2,'0')}</span>
+                <span className="text-[8px] font-black uppercase tracking-[0.3em] text-white/40 mt-2">Sec</span>
+              </div>
+            </div>
+            <div className="text-[10px] font-black uppercase tracking-[0.5em] text-sage mt-4">Status: Stable</div>
             
             <div className="grid grid-cols-2 gap-8 mt-12 pt-10 border-t border-white/10">
               <div>

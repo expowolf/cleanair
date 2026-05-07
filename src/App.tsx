@@ -27,9 +27,9 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 // Defined outside App so React never remounts it between renders (would reset input focus).
 function Shell({ children, centered }: { children: React.ReactNode; centered?: boolean }) {
   return (
-    <div className={`min-h-screen w-full bg-[#111] text-charcoal md:flex md:items-center md:justify-center md:p-8 ${centered ? 'flex items-center justify-center p-4' : ''}`}>
+    <div className={`h-[100dvh] w-full bg-[#111] text-charcoal md:flex md:items-center md:justify-center md:p-8 ${centered ? 'flex items-center justify-center p-4' : ''}`}>
       <Toaster position="top-center" richColors theme="light" />
-      <div className="relative bg-background w-full min-h-screen flex flex-col overflow-hidden md:w-[390px] md:h-[844px] md:min-h-0 md:rounded-[60px] md:ring-[12px] md:ring-[#333] md:shadow-[0_0_100px_rgba(0,0,0,0.5)]">
+      <div className="relative bg-background w-full h-[100dvh] flex flex-col overflow-hidden md:w-[390px] md:h-[844px] md:rounded-[60px] md:ring-[12px] md:ring-[#333] md:shadow-[0_0_100px_rgba(0,0,0,0.5)]">
         <div className="hidden md:flex absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[34px] bg-[#333] rounded-b-[20px] z-[60] items-center justify-center">
           <div className="w-10 h-1 bg-white/10 rounded-full" />
         </div>

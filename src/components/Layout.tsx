@@ -15,8 +15,8 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
     { id: 'home', icon: Home, label: 'Home' },
     { id: 'plan', icon: Calendar, label: 'Plan' },
     { id: 'crave', icon: Flame, label: 'Crave' },
-    { id: 'settings', icon: SettingsIcon, label: 'Settings' },
     { id: 'community', icon: Users, label: 'Social' },
+    { id: 'settings', icon: SettingsIcon, label: 'Settings' },
   ];
 
   return (
