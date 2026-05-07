@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Home, Calendar, Users, BookOpen, Flame } from 'lucide-react';
+import { Home, Calendar, Users, Settings as SettingsIcon, Flame } from 'lucide-react';
 import { BirdLogo } from './Branding';
 import CraveButton from './CraveButton';
 
@@ -15,7 +15,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
     { id: 'home', icon: Home, label: 'Home' },
     { id: 'plan', icon: Calendar, label: 'Plan' },
     { id: 'crave', icon: Flame, label: 'Crave' },
-    { id: 'learn', icon: BookOpen, label: 'Learn' },
+    { id: 'settings', icon: SettingsIcon, label: 'Settings' },
     { id: 'community', icon: Users, label: 'Social' },
   ];
 

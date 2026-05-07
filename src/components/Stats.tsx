@@ -21,11 +21,19 @@ export default function Stats({ profile, onNavigate }: StatsProps) {
   const [loading, setLoading] = useState(true);
   const [newlyUnlocked, setNewlyUnlocked] = useState<string[]>([]);
 
-  const now = new Date();
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
   const quitDate = new Date(profile.quitDate);
+  const totalSecs = Math.max(0, Math.floor((now.getTime() - quitDate.getTime()) / 1000));
+  const days = Math.floor(totalSecs / 86400);
+  const liveHours = Math.floor((totalSecs % 86400) / 3600);
+  const liveMins = Math.floor((totalSecs % 3600) / 60);
+  const liveSecs = totalSecs % 60;
   const mins = Math.max(0, differenceInMinutes(now, quitDate));
   const hours = Math.max(0, differenceInHours(now, quitDate));
-  const days = Math.max(0, differenceInDays(now, quitDate));
 
   useEffect(() => {
     if (!auth.currentUser) return;
@@ -114,7 +122,7 @@ export default function Stats({ profile, onNavigate }: StatsProps) {
           
           <div className="relative z-10">
             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40 mb-4 block">Deployment Uptime</span>
-            <div className="text-8xl font-black tracking-tighter mb-2 font-mono">{days}</div>
+            <div className="text-6xl font-black tracking-tighter mb-2 font-mono">{days}<span className="text-2xl text-white/50">d</span> {String(liveHours).padStart(2,'0')}<span className="text-2xl text-white/50">h</span> {String(liveMins).padStart(2,'0')}<span className="text-2xl text-white/50">m</span> {String(liveSecs).padStart(2,'0')}<span className="text-2xl text-white/50">s</span></div>
             <div className="text-[10px] font-black uppercase tracking-[0.5em] text-sage">Status: Stable</div>
             
             <div className="grid grid-cols-2 gap-8 mt-12 pt-10 border-t border-white/10">

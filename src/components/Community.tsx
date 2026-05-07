@@ -234,7 +234,6 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
         <div className="relative z-10 flex flex-col gap-6">
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full bg-sage animate-pulse shadow-[0_0_8px_rgba(125,184,122,0.8)]" />
-            <span className="text-[9px] font-black uppercase tracking-[0.3em] text-white/40">Global Protocol Active</span>
           </div>
           <div className="flex justify-between items-end border-b border-white/5 pb-6">
             <div className="flex flex-col">

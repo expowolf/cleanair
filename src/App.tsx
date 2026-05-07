@@ -196,7 +196,7 @@ export default function App() {
     switch (activeTab) {
       case 'home': return <Stats profile={profile} onNavigate={setActiveTab} />;
       case 'plan': return <QuitPlan profile={profile} />;
-      case 'learn': return <Learn />;
+      case 'learn': return <Dashboard profile={profile} />;
       case 'community': return <Community profile={profile} />;
       case 'settings': return <Dashboard profile={profile} />;
       default: return <Stats profile={profile} onNavigate={setActiveTab} />;
