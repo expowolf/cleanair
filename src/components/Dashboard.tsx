@@ -186,12 +186,38 @@ export default function Dashboard({ profile }: DashboardProps) {
 
   const selectAvatar = async (url: string) => {
     if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    // Persist locally first so the photo always sticks even if Firestore is blocked.
     try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), { photoURL: url });
-      setShowAvatarPicker(false);
+      const key = `profile:${uid}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '{}');
+      localStorage.setItem(key, JSON.stringify({ ...existing, photoURL: url }));
+    } catch {}
+    (profile as any).photoURL = url;
+    setShowAvatarPicker(false);
+    try {
+      await Promise.race([
+        updateDoc(doc(db, 'users', uid), { photoURL: url }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]);
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
+      console.warn('Avatar Firestore sync skipped', error);
     }
+  };
+
+  const avatarFileRef = React.useRef<HTMLInputElement | null>(null);
+  const onPickAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const { compressImage } = await import('../lib/image');
+      const dataUrl = await compressImage(f, 400, 0.8);
+      await selectAvatar(dataUrl);
+    } catch (err) {
+      console.error(err);
+      alert('Could not load image');
+    }
+    e.target.value = '';
   };
 
   const SettingsRow = ({ icon: Icon, label, sub, onClick, color = "text-gray-400" }: any) => (
@@ -374,11 +400,19 @@ export default function Dashboard({ profile }: DashboardProps) {
             className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm flex items-center justify-center p-6"
           >
             <div className="bg-white p-8 rounded-[32px] card-shadow w-full max-w-sm">
-              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 text-center">Choose an Avatar</h3>
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 text-center">Profile Picture</h3>
+              <input ref={avatarFileRef} type="file" accept="image/*" className="hidden" onChange={onPickAvatar} />
+              <button
+                onClick={() => avatarFileRef.current?.click()}
+                className="w-full mb-6 py-4 bg-sage text-white rounded-2xl font-black uppercase tracking-widest text-xs active:scale-95 transition-all"
+              >
+                Upload from Device
+              </button>
+              <div className="text-[10px] font-black uppercase tracking-widest text-gray-300 text-center mb-3">or pick a default</div>
               <div className="grid grid-cols-3 gap-4">
                 {DEFAULT_AVATARS.map((url, i) => (
-                  <button 
-                    key={i} 
+                  <button
+                    key={i}
                     onClick={() => selectAvatar(url)}
                     className="w-full aspect-square rounded-2xl overflow-hidden border-2 border-transparent hover:border-sage transition-all"
                   >
@@ -386,7 +420,7 @@ export default function Dashboard({ profile }: DashboardProps) {
                   </button>
                 ))}
               </div>
-              <button 
+              <button
                 onClick={() => setShowAvatarPicker(false)}
                 className="w-full mt-8 py-3 text-sm font-bold text-gray-400"
               >

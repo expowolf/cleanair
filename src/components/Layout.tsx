@@ -25,7 +25,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       <div className="h-[34px] flex-shrink-0" />
       
       {/* Status Bar */}
-      <div className="h-[44px] px-[30px] flex-shrink-0 flex justify-between items-center text-[11px] font-bold z-40 bg-background/80 backdrop-blur-md">
+      <div className="h-[44px] px-[30px] flex-shrink-0 flex justify-between items-center text-[11px] font-bold z-40 bg-background">
         <div className="flex items-center gap-1.5 text-charcoal/40">
           <span>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
@@ -40,7 +40,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
       </main>
 
       {/* Bottom Navigation */}
-      <nav className="h-[90px] bg-white/95 backdrop-blur-2xl border-t border-gray-100 flex-shrink-0 pb-safe px-6 flex justify-between items-center z-40 relative">
+      <nav className="h-[90px] bg-white border-t border-gray-100 flex-shrink-0 pb-safe px-6 flex justify-between items-center z-40 relative">
         {tabs.map((tab) => {
           if (tab.id === 'crave') {
             return (

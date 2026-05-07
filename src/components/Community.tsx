@@ -202,9 +202,25 @@ function RailNavButton({ active, icon: Icon, onClick }: { active: boolean, icon:
 function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[], onReport: (id: string, type: 'post' | 'comment' | 'user') => void }) {
   const [newPost, setNewPost] = useState('');
   const [posting, setPosting] = useState(false);
+  const [postImage, setPostImage] = useState<string | null>(null);
+  const postFileRef = useRef<HTMLInputElement | null>(null);
+
+  const onPickPostImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const { compressImage } = await import('../lib/image');
+      const dataUrl = await compressImage(f, 1000, 0.7);
+      setPostImage(dataUrl);
+    } catch (err) {
+      console.error(err);
+      alert('Could not load image');
+    }
+    e.target.value = '';
+  };
 
   const handlePost = async () => {
-    if (!newPost.trim() || !auth.currentUser) return;
+    if ((!newPost.trim() && !postImage) || !auth.currentUser) return;
     setPosting(true);
     try {
       await addDoc(collection(db, 'posts'), cleanObject({
@@ -212,6 +228,7 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
         authorName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
         authorPhoto: profile.photoURL || auth.currentUser.photoURL,
         content: newPost,
+        imageUrl: postImage || undefined,
         createdAt: new Date().toISOString(),
         likes: [],
         commentCount: 0,
@@ -219,6 +236,7 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
       }));
       await unlockAchievement('social_post');
       setNewPost('');
+      setPostImage(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'posts');
     } finally {
@@ -369,10 +387,17 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
             onChange={(e) => setNewPost(e.target.value)}
           />
         </div>
+        {postImage && (
+          <div className="relative">
+            <img src={postImage} alt="Attachment" className="w-full max-h-80 object-cover rounded-2xl" />
+            <button onClick={() => setPostImage(null)} className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white text-sm font-bold flex items-center justify-center">×</button>
+          </div>
+        )}
+        <input ref={postFileRef} type="file" accept="image/*" className="hidden" onChange={onPickPostImage} />
         <div className="flex items-center justify-between pt-4 border-t border-gray-50">
           <div className="flex gap-2">
-            <button className="p-2 text-gray-300 hover:text-charcoal bg-gray-50 rounded-lg transition-colors"><ImageIcon size={14} /></button>
-            <button className="p-2 text-gray-300 hover:text-charcoal bg-gray-50 rounded-lg transition-colors"><Camera size={14} /></button>
+            <button onClick={() => postFileRef.current?.click()} className="p-2 text-gray-300 hover:text-charcoal bg-gray-50 rounded-lg transition-colors"><ImageIcon size={14} /></button>
+            <button onClick={() => postFileRef.current?.click()} className="p-2 text-gray-300 hover:text-charcoal bg-gray-50 rounded-lg transition-colors"><Camera size={14} /></button>
           </div>
           <button 
             onClick={handlePost}
