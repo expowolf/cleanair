@@ -51,13 +51,46 @@ export default function CraveButton() {
 
   const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+
+  // Pick a warm-sounding voice once available. If none of the curated voices
+  // are present on this device, we don't speak at all (better silence than robot).
+  useEffect(() => {
+    if (!('speechSynthesis' in window)) return;
+    const PREFERRED = [
+      'Samantha',                 // macOS / iOS — natural female
+      'Google US English',        // Chrome desktop
+      'Microsoft Aria Online',    // Edge / Win11
+      'Microsoft Jenny Online',
+      'Google UK English Female',
+      'Karen',                    // macOS
+      'Moira',                    // macOS
+      'Serena',
+    ];
+    const pick = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      for (const name of PREFERRED) {
+        const v = voices.find((x) => x.name === name || x.name.startsWith(name));
+        if (v) { voiceRef.current = v; return; }
+      }
+      // No curated match → leave null so we stay silent.
+      voiceRef.current = null;
+    };
+    pick();
+    window.speechSynthesis.onvoiceschanged = pick;
+    return () => { window.speechSynthesis.onvoiceschanged = null as any; };
+  }, []);
 
   const speak = useCallback((text: string) => {
     if (isMuted || !('speechSynthesis' in window)) return;
+    if (!voiceRef.current) return; // No warm voice on this device — stay silent.
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    utterance.voice = voiceRef.current;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.05;
+    utterance.volume = 0.85;
     speechRef.current = utterance;
     window.speechSynthesis.speak(utterance);
   }, [isMuted]);
