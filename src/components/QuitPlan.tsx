@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Target, Edit2, ChevronRight, CheckCircle2, Circle, Loader2, Send, Plus, ThumbsUp, ThumbsDown, Zap, Trophy, HelpCircle, Youtube, ExternalLink, X } from 'lucide-react';
 import { UserProfile, QuitPlan as IQuitPlan, DailyTask } from '../types';
@@ -111,43 +112,46 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
 
   const toggleTask = async (taskId: string) => {
     if (!plan || !auth.currentUser) return;
-    const updatedTasks = plan.tasks.map(t => 
+    const uid = auth.currentUser.uid;
+    const isCompleting = !plan.tasks.find(t => t.id === taskId)?.completed;
+    const updatedTasks = plan.tasks.map(t =>
       t.id === taskId ? { ...t, completed: !t.completed, completedAt: !t.completed ? new Date().toISOString() : null } : t
     );
-    try {
-      await updateDoc(doc(db, 'plans', auth.currentUser.uid), cleanObject({ tasks: updatedTasks }));
-      
-      // Update progress snapshot
-      const progressRef = doc(db, 'progress', auth.currentUser.uid);
-      const progressSnap = await getDoc(progressRef);
-      const isCompleting = !plan.tasks.find(t => t.id === taskId)?.completed;
 
-      if (isCompleting) {
-        if (progressSnap.exists()) {
-          const data = progressSnap.data();
-          await updateDoc(progressRef, {
-            tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1,
-            goalsCompleted: (data.goalsCompleted || 0) + 1,
-            lastUpdated: new Date().toISOString()
-          });
-          // Check for achievements
-          checkAchievements({ ...data, tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1 } as any);
-        } else {
-          await setDoc(progressRef, {
-            uid: auth.currentUser.uid,
-            streakData: {},
-            goalsCompleted: 1,
-            moneySaved: 0,
-            cravingsResisted: 0,
-            cravingsTotal: 0,
-            tasksCompletedTotal: 1,
-            longestStreak: 0,
-            lastUpdated: new Date().toISOString()
-          });
-        }
-      }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `plans/${auth.currentUser.uid}`);
+    // Optimistic local update so the checkbox responds instantly.
+    const updatedPlan = { ...plan, tasks: updatedTasks };
+    setPlan(updatedPlan);
+    try { localStorage.setItem(`plan:${uid}`, JSON.stringify(updatedPlan)); } catch {}
+
+    // Best-effort Firestore sync; non-blocking.
+    Promise.race([
+      updateDoc(doc(db, 'plans', uid), cleanObject({ tasks: updatedTasks })),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+    ]).catch((err) => console.warn('Task toggle sync skipped', err?.message || err));
+
+    if (isCompleting) {
+      Promise.race([
+        (async () => {
+          const progressRef = doc(db, 'progress', uid);
+          const progressSnap = await getDoc(progressRef);
+          if (progressSnap.exists()) {
+            const data = progressSnap.data();
+            await updateDoc(progressRef, {
+              tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1,
+              goalsCompleted: (data.goalsCompleted || 0) + 1,
+              lastUpdated: new Date().toISOString()
+            });
+            checkAchievements({ ...data, tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1 } as any);
+          } else {
+            await setDoc(progressRef, {
+              uid, streakData: {}, goalsCompleted: 1, moneySaved: 0,
+              cravingsResisted: 0, cravingsTotal: 0, tasksCompletedTotal: 1,
+              longestStreak: 0, lastUpdated: new Date().toISOString()
+            });
+          }
+        })(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]).catch((err) => console.warn('Progress sync skipped', err?.message || err));
     }
   };
 
@@ -467,59 +471,63 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
         </motion.div>
       )}
 
-      <AnimatePresence>
-        {showGoalInput && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed inset-0 z-[60] bg-background/95 backdrop-blur-sm flex items-center justify-center p-6"
-          >
-            <div className="bg-white w-full max-w-sm rounded-[32px] p-8 card-shadow relative overflow-y-auto max-h-[90vh] no-scrollbar">
-              <button 
-                onClick={() => setShowGoalInput(false)}
-                className="absolute top-6 right-6 text-gray-400"
-              >
-                <ChevronRight className="rotate-90" />
-              </button>
+      {createPortal(
+        <AnimatePresence>
+          {showGoalInput && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] bg-background flex flex-col"
+            >
+              <div className="flex-1 overflow-y-auto p-6 pt-12">
+                <div className="max-w-sm mx-auto flex flex-col gap-6">
+                  <button
+                    onClick={() => setShowGoalInput(false)}
+                    className="self-end text-gray-400 p-2"
+                  >
+                    <X size={24} />
+                  </button>
+                  <div className="w-12 h-12 bg-sage/10 rounded-full flex items-center justify-center text-sage">
+                    <Target size={24} />
+                  </div>
+                  <h2 className="text-xl font-bold text-charcoal">What's your focus?</h2>
+                  <p className="text-sm text-gray-500">Instead of just "quitting", what is one big dream you want to achieve with the extra time and money? We'll tailor your daily routine to help you reach it.</p>
 
-              <div className="flex flex-col gap-6">
-                <div className="w-12 h-12 bg-sage/10 rounded-full flex items-center justify-center text-sage">
-                  <Target size={24} />
-                </div>
-                <h2 className="text-xl font-bold text-charcoal">What's your focus?</h2>
-                <p className="text-sm text-gray-500">Instead of just "quitting", what is one big dream you want to achieve with the extra time and money? We'll tailor your daily routine to help you reach it.</p>
-                
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {['Run a 5k', 'Build a Car', 'Learn to Code', 'Write a Book', 'Master Cooking'].map(g => (
-                    <button 
-                      key={g}
-                      onClick={() => setGoalText(g)}
-                      className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${goalText === g ? 'bg-sage text-white border-sage' : 'bg-white text-gray-500 border-gray-200 hover:border-sage'}`}
-                    >
-                      {g}
-                    </button>
-                  ))}
-                </div>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {['Run a 5k', 'Build a Car', 'Learn to Code', 'Write a Book', 'Master Cooking'].map(g => (
+                      <button
+                        key={g}
+                        onClick={() => setGoalText(g)}
+                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${goalText === g ? 'bg-sage text-white border-sage' : 'bg-white text-gray-500 border-gray-200 hover:border-sage'}`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
 
-                <textarea 
-                  value={goalText}
-                  onChange={(e) => setGoalText(e.target.value)}
-                  placeholder="e.g. I want to build a custom drift car and learn how to swap an engine..."
-                  className="w-full p-6 bg-gray-50 rounded-[32px] text-sm border border-gray-100 focus:ring-2 focus:ring-sage outline-none min-h-[160px] font-bold text-charcoal placeholder:text-gray-200 transition-all"
-                />
-                <button 
+                  <textarea
+                    value={goalText}
+                    onChange={(e) => setGoalText(e.target.value)}
+                    placeholder="e.g. I want to build a custom drift car and learn how to swap an engine..."
+                    className="w-full p-6 bg-gray-50 rounded-[32px] text-sm border border-gray-100 focus:ring-2 focus:ring-sage outline-none min-h-[160px] font-bold text-charcoal placeholder:text-gray-200 transition-all"
+                  />
+                </div>
+              </div>
+              <div className="p-6 pb-10 bg-background border-t border-gray-100">
+                <button
                   onClick={startGoalFlow}
                   disabled={!goalText.trim() || generating}
-                  className="w-full py-5 bg-charcoal text-white rounded-[24px] text-[10px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2 disabled:opacity-20 shadow-xl shadow-charcoal/20 active:scale-95 transition-all mt-4"
+                  className="w-full max-w-sm mx-auto block py-5 bg-charcoal text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2 disabled:opacity-20 shadow-xl shadow-charcoal/20 active:scale-95 transition-all"
                 >
                   {generating ? <Loader2 className="animate-spin" size={20} /> : 'Initialize Protocol'}
                 </button>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {renderPlan()}
       

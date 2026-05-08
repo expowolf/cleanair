@@ -77,14 +77,25 @@ export default function Community({ profile, onProfileUpdate }: CommunityProps) 
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Hydrate from local cache first so locally-created posts always appear.
+    try {
+      const cached = JSON.parse(localStorage.getItem('posts:local') || '[]');
+      if (Array.isArray(cached) && cached.length) setPosts(cached);
+    } catch {}
+
     // Render even if Firestore never replies.
     const fallback = setTimeout(() => setLoading(false), 4000);
 
     // Listen to posts
     const qPosts = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(50));
     const unsubPosts = onSnapshot(qPosts, (snapshot) => {
-      const newPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-      setPosts(newPosts);
+      const remote = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+      // Merge: local-only posts (not yet synced) shown above remote ones.
+      let local: Post[] = [];
+      try { local = JSON.parse(localStorage.getItem('posts:local') || '[]'); } catch {}
+      const remoteIds = new Set(remote.map(p => p.id));
+      const localOnly = local.filter(p => !remoteIds.has(p.id));
+      setPosts([...localOnly, ...remote]);
       setLoading(false);
     }, (error) => { handleFirestoreError(error, OperationType.LIST, 'posts'); setLoading(false); });
 
@@ -223,26 +234,50 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
 
   const handlePost = async () => {
     if ((!newPost.trim() && !postImage) || !auth.currentUser) return;
+    const text = newPost.trim();
+
+    // Basic moderation: blocklist + length cap. Catches the obvious; deeper
+    // moderation should run server-side once Firestore rules are aligned.
+    const BANNED = /\b(fuck|shit|bitch|cunt|nigger|faggot|retard|kys|kill yourself|porn|nsfw)\b/i;
+    if (text.length > 600) { toast.error('Post too long', { description: 'Keep it under 600 characters.' }); return; }
+    if (BANNED.test(text)) { toast.error('Post blocked', { description: 'Community guidelines violation. Please rephrase.' }); return; }
+
     setPosting(true);
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const post: Post = {
+      id: localId,
+      userId: auth.currentUser.uid,
+      authorName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
+      authorPhoto: profile.photoURL || auth.currentUser.photoURL || undefined,
+      content: text,
+      imageUrl: postImage || undefined,
+      createdAt: new Date().toISOString(),
+      likes: [],
+      commentCount: 0,
+      repostCount: 0,
+    };
+
+    // Save locally first so the post is visible regardless of Firestore.
     try {
-      await addDoc(collection(db, 'posts'), cleanObject({
-        userId: auth.currentUser.uid,
-        authorName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
-        authorPhoto: profile.photoURL || auth.currentUser.photoURL,
-        content: newPost,
-        imageUrl: postImage || undefined,
-        createdAt: new Date().toISOString(),
-        likes: [],
-        commentCount: 0,
-        repostCount: 0
-      }));
-      await unlockAchievement('social_post');
-      setNewPost('');
-      setPostImage(null);
+      const cached = JSON.parse(localStorage.getItem('posts:local') || '[]');
+      const next = [post, ...cached].slice(0, 50);
+      localStorage.setItem('posts:local', JSON.stringify(next));
+    } catch {}
+
+    setNewPost('');
+    setPostImage(null);
+    setPosting(false);
+    toast.success('Posted');
+
+    // Best-effort cloud sync.
+    try {
+      await Promise.race([
+        addDoc(collection(db, 'posts'), cleanObject({ ...post, id: undefined })),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]);
+      await unlockAchievement('social_post').catch(() => {});
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'posts');
-    } finally {
-      setPosting(false);
+      console.warn('Post Firestore sync skipped', error);
     }
   };
 

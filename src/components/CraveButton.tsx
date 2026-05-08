@@ -262,8 +262,24 @@ export default function CraveButton() {
     setFeedback(null);
     setIsSaved(false);
     setCurrentSuggestion(null);
-    window.speechSynthesis.cancel();
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   };
+
+  const closeAndReset = () => {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setIsOpen(false);
+    resetState();
+  };
+
+  // Belt-and-suspenders: any time the modal closes, kill audio + timer.
+  useEffect(() => {
+    if (!isOpen) {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    }
+  }, [isOpen]);
 
   return (
     <>
@@ -282,16 +298,16 @@ export default function CraveButton() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[9999] bg-background backdrop-blur-3xl flex flex-col items-center justify-center p-8 overflow-hidden"
+            className="fixed inset-0 z-[9999] bg-background flex flex-col"
           >
-            {/* Elegant Header */}
-            <header className="absolute top-0 left-0 right-0 p-10 flex justify-between items-start">
-              <div className="flex flex-col">
-                <div className="flex items-center gap-3 mb-1">
-                  <div className="w-2 h-2 rounded-full bg-orange animate-pulse" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Focus Mode Active</span>
+            {/* Header (in-flow, not absolute, so it can't overlap content) */}
+            <header className="flex-shrink-0 px-6 pt-12 pb-4 flex justify-between items-start gap-4">
+              <div className="flex flex-col min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-orange animate-pulse flex-shrink-0" />
+                  <span className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-500 truncate">Focus Mode</span>
                 </div>
-                <h1 className="text-sm font-bold text-charcoal/40">CRAVING DISRUPTION PROTOCOL</h1>
+                <h1 className="text-[11px] font-bold text-charcoal/40 truncate">CRAVING DISRUPTION</h1>
               </div>
               
               <div className="flex items-center gap-2">
@@ -302,7 +318,7 @@ export default function CraveButton() {
                   {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </button>
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={closeAndReset}
                   className="w-12 h-12 rounded-full bg-white card-shadow flex items-center justify-center text-gray-400 hover:text-red-500 transition-all active:scale-90"
                 >
                   <X size={20} />
@@ -311,9 +327,8 @@ export default function CraveButton() {
             </header>
 
             {/* Main Stage */}
-            <div className="w-full max-w-lg flex flex-col items-center">
-              
-              {/* View: Intensity */}
+            <div className="flex-1 overflow-y-auto w-full flex flex-col items-center justify-center px-6 py-4">
+              <div className="w-full max-w-lg flex flex-col items-center">
               {/* Intensity step removed: open directly to trigger selection. */}
 
               {/* View: Trigger */}
@@ -508,6 +523,7 @@ export default function CraveButton() {
                   </div>
                 </motion.div>
               )}
+              </div>
             </div>
           </motion.div>
           )}
