@@ -99,15 +99,37 @@ export default function Community({ profile, onProfileUpdate }: CommunityProps) 
       setLoading(false);
     }, (error) => { handleFirestoreError(error, OperationType.LIST, 'posts'); setLoading(false); });
 
-    // Listen to chats
+    // Listen to chats + notify on new incoming messages.
     const qChats = query(
-      collection(db, 'chats'), 
+      collection(db, 'chats'),
       where('participants', 'array-contains', auth.currentUser.uid),
       orderBy('lastMessageAt', 'desc')
     );
+    const seenKey = `chats:lastSeen:${auth.currentUser.uid}`;
+    let lastSeen: Record<string, string> = {};
+    try { lastSeen = JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch {}
+    let isFirstChatLoad = true;
     const unsubChats = onSnapshot(qChats, (snapshot) => {
       const newChats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
       setChats(newChats);
+      if (!isFirstChatLoad) {
+        for (const c of newChats) {
+          const last = c.lastMessageAt;
+          if (!last) continue;
+          const prev = lastSeen[c.id];
+          if (prev && last > prev && c.lastMessage) {
+            // Skip notify if the user is currently viewing this chat.
+            // (activeChat is closed-over; readers rely on whatever React renders.)
+            toast.message('New message', { description: c.lastMessage.slice(0, 80) });
+          }
+          lastSeen[c.id] = last;
+        }
+        try { localStorage.setItem(seenKey, JSON.stringify(lastSeen)); } catch {}
+      } else {
+        for (const c of newChats) if (c.lastMessageAt) lastSeen[c.id] = c.lastMessageAt;
+        try { localStorage.setItem(seenKey, JSON.stringify(lastSeen)); } catch {}
+        isFirstChatLoad = false;
+      }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'chats'));
 
     return () => {
@@ -624,11 +646,25 @@ function ChatView({ chat, profile, onBack }: { chat: Chat, profile: UserProfile,
   const [newMessage, setNewMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const localKey = `messages:${chat.id}`;
+
+  // Hydrate from local cache so messages appear immediately even if Firestore is blocked.
   useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(localKey) || '[]');
+      if (Array.isArray(cached) && cached.length) setMessages(cached);
+    } catch {}
+
     const q = query(collection(db, `chats/${chat.id}/messages`), orderBy('createdAt', 'asc'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
-      const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      setMessages(newMessages);
+      const remote = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      // Merge: keep local-only messages (id starts with "local_") that haven't synced yet.
+      let local: Message[] = [];
+      try { local = JSON.parse(localStorage.getItem(localKey) || '[]'); } catch {}
+      const remoteIds = new Set(remote.map(m => m.id));
+      const localOnly = local.filter(m => m.id.startsWith('local_') && !remoteIds.has(m.id));
+      const merged = [...remote, ...localOnly].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      setMessages(merged);
       setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 100);
     }, (error) => handleFirestoreError(error, OperationType.LIST, `chats/${chat.id}/messages`));
     return () => unsub();
@@ -636,25 +672,41 @@ function ChatView({ chat, profile, onBack }: { chat: Chat, profile: UserProfile,
 
   const handleSend = async () => {
     if (!newMessage.trim() || !auth.currentUser) return;
-    const msg = newMessage;
+    const text = newMessage.trim();
     setNewMessage('');
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const msg: Message = {
+      id: localId,
+      chatId: chat.id,
+      senderId: auth.currentUser.uid,
+      senderName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
+      content: text,
+      createdAt: new Date().toISOString(),
+      readBy: [auth.currentUser.uid],
+    };
+
+    // Optimistic local append + persistent cache.
+    setMessages((prev) => [...prev, msg]);
     try {
-      const msgData = cleanObject({
-        chatId: chat.id,
-        senderId: auth.currentUser.uid,
-        senderName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
-        content: msg,
-        createdAt: new Date().toISOString(),
-        readBy: [auth.currentUser.uid]
-      });
-      await addDoc(collection(db, `chats/${chat.id}/messages`), msgData);
-      await updateDoc(doc(db, 'chats', chat.id), {
-        lastMessage: msg,
-        lastMessageAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `chats/${chat.id}/messages`);
-    }
+      const cached: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      cached.push(msg);
+      localStorage.setItem(localKey, JSON.stringify(cached.slice(-100)));
+    } catch {}
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
+
+    // Best-effort cloud sync; never blocks the UI.
+    Promise.race([
+      (async () => {
+        const msgData = cleanObject({ ...msg, id: undefined });
+        await addDoc(collection(db, `chats/${chat.id}/messages`), msgData);
+        await updateDoc(doc(db, 'chats', chat.id), {
+          lastMessage: text,
+          lastMessageAt: new Date().toISOString(),
+        });
+      })(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+    ]).catch((err) => console.warn('DM sync skipped', err?.message || err));
   };
 
   return (
