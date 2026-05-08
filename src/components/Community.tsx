@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -51,6 +52,7 @@ import { unlockAchievement } from '../services/achievementService';
 
 interface CommunityProps {
   profile: UserProfile;
+  onProfileUpdate?: (patch: Partial<UserProfile>) => void;
 }
 
 type CommunityView = 'feed' | 'messages' | 'groups' | 'profile';
@@ -64,7 +66,7 @@ const DEFAULT_AVATARS = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Maya',
 ];
 
-export default function Community({ profile }: CommunityProps) {
+export default function Community({ profile, onProfileUpdate }: CommunityProps) {
   const [view, setView] = useState<CommunityView>('feed');
   const [posts, setPosts] = useState<Post[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -267,8 +269,7 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
       ]);
     } catch (e) { console.warn('Public profile sync skipped', e); }
-    // Optimistic local update — parent will pick it up on next snapshot or reload.
-    Object.assign(profile, { username, displayName, bio });
+    onProfileUpdate?.({ username, displayName, bio });
     setSavingProfile(false);
   };
 
@@ -492,12 +493,27 @@ function PostCard({ post, profile, onReport }: { post: Post, profile: UserProfil
           <span className="text-[10px] font-black font-mono tracking-widest">{post.likes.length}</span>
         </button>
         
-        <button className="flex items-center gap-2.5 text-gray-300 hover:text-charcoal transition-all group">
+        <button
+          onClick={() => toast.info('Comments coming soon')}
+          className="flex items-center gap-2.5 text-gray-300 hover:text-charcoal transition-all group"
+        >
           <MessageCircle size={20} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
           <span className="text-[10px] font-black font-mono tracking-widest">{post.commentCount}</span>
         </button>
 
-        <button className="flex items-center gap-2.5 text-gray-300 hover:text-sage transition-all ml-auto group">
+        <button
+          onClick={async () => {
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: 'CleanAIr', text: post.content });
+              } else {
+                await navigator.clipboard.writeText(post.content);
+                toast.success('Post copied to clipboard');
+              }
+            } catch {}
+          }}
+          className="flex items-center gap-2.5 text-gray-300 hover:text-sage transition-all ml-auto group"
+        >
           <Repeat size={20} strokeWidth={3} className="group-hover:rotate-180 transition-transform duration-500" />
         </button>
       </div>

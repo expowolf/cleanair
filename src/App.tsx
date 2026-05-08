@@ -193,12 +193,14 @@ export default function App() {
 
   const renderContent = () => {
     if (!profile) return null;
+    const patchProfile = (patch: Partial<UserProfile>) =>
+      setProfile((p) => (p ? { ...p, ...patch } : p));
     switch (activeTab) {
       case 'home': return <Stats profile={profile} onNavigate={setActiveTab} />;
       case 'plan': return <QuitPlan profile={profile} />;
-      case 'learn': return <Dashboard profile={profile} />;
-      case 'community': return <Community profile={profile} />;
-      case 'settings': return <Dashboard profile={profile} />;
+      case 'learn': return <Dashboard profile={profile} onProfileUpdate={patchProfile} />;
+      case 'community': return <Community profile={profile} onProfileUpdate={patchProfile} />;
+      case 'settings': return <Dashboard profile={profile} onProfileUpdate={patchProfile} />;
       default: return <Stats profile={profile} onNavigate={setActiveTab} />;
     }
   };

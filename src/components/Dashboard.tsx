@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import Legal from './Legal';
@@ -41,11 +42,12 @@ const DEFAULT_AVATARS = [
 
 interface DashboardProps {
   profile: UserProfile;
+  onProfileUpdate?: (patch: Partial<UserProfile>) => void;
 }
 
 type SettingsSection = 'main' | 'account' | 'profile' | 'personalization' | 'notifications' | 'privacy' | 'appearance' | 'help' | 'about';
 
-export default function Dashboard({ profile }: DashboardProps) {
+export default function Dashboard({ profile, onProfileUpdate }: DashboardProps) {
   const [section, setSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -193,7 +195,7 @@ export default function Dashboard({ profile }: DashboardProps) {
       const existing = JSON.parse(localStorage.getItem(key) || '{}');
       localStorage.setItem(key, JSON.stringify({ ...existing, photoURL: url }));
     } catch {}
-    (profile as any).photoURL = url;
+    onProfileUpdate?.({ photoURL: url });
     setShowAvatarPicker(false);
     try {
       await Promise.race([
@@ -286,7 +288,10 @@ export default function Dashboard({ profile }: DashboardProps) {
             <h3 className="text-2xl font-black tracking-tight leading-none mb-1 uppercase">Upgrade Protocol</h3>
             <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Unlock Elite Recovery Monitoring</p>
           </div>
-          <button className="w-full py-4 bg-sage text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sage/20 hover:bg-white hover:text-sage transition-all">
+          <button
+            onClick={() => toast.info('Premium tier coming soon', { description: 'You\'ll be the first to know when Elite Recovery launches.' })}
+            className="w-full py-4 bg-sage text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sage/20 hover:bg-white hover:text-sage transition-all"
+          >
             Unlock Full Potential
           </button>
         </div>
@@ -819,7 +824,10 @@ export default function Dashboard({ profile }: DashboardProps) {
 
         <div className="mt-4 p-8 bg-sage/5 rounded-[40px] border border-dashed border-sage/20 text-center">
           <p className="text-xs font-bold text-sage mb-2">Need direct intervention?</p>
-          <button className="px-10 py-4 bg-sage text-white rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-sage/20 active:scale-95 transition-all">
+          <button
+            onClick={() => { window.location.href = 'mailto:support@cleanair.app?subject=CleanAIr%20Support'; }}
+            className="px-10 py-4 bg-sage text-white rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-sage/20 active:scale-95 transition-all"
+          >
             Chat with a Guide
           </button>
         </div>
