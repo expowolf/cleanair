@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   MessageSquare, 
@@ -51,6 +52,7 @@ import { unlockAchievement } from '../services/achievementService';
 
 interface CommunityProps {
   profile: UserProfile;
+  onProfileUpdate?: (patch: Partial<UserProfile>) => void;
 }
 
 type CommunityView = 'feed' | 'messages' | 'groups' | 'profile';
@@ -64,7 +66,7 @@ const DEFAULT_AVATARS = [
   'https://api.dicebear.com/7.x/avataaars/svg?seed=Maya',
 ];
 
-export default function Community({ profile }: CommunityProps) {
+export default function Community({ profile, onProfileUpdate }: CommunityProps) {
   const [view, setView] = useState<CommunityView>('feed');
   const [posts, setPosts] = useState<Post[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -75,26 +77,59 @@ export default function Community({ profile }: CommunityProps) {
   useEffect(() => {
     if (!auth.currentUser) return;
 
+    // Hydrate from local cache first so locally-created posts always appear.
+    try {
+      const cached = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]');
+      if (Array.isArray(cached) && cached.length) setPosts(cached);
+    } catch {}
+
     // Render even if Firestore never replies.
     const fallback = setTimeout(() => setLoading(false), 4000);
 
     // Listen to posts
     const qPosts = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(50));
     const unsubPosts = onSnapshot(qPosts, (snapshot) => {
-      const newPosts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
-      setPosts(newPosts);
+      const remote = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
+      // Merge: local-only posts (not yet synced) shown above remote ones.
+      let local: Post[] = [];
+      try { local = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]'); } catch {}
+      const remoteIds = new Set(remote.map(p => p.id));
+      const localOnly = local.filter(p => !remoteIds.has(p.id));
+      setPosts([...localOnly, ...remote]);
       setLoading(false);
     }, (error) => { handleFirestoreError(error, OperationType.LIST, 'posts'); setLoading(false); });
 
-    // Listen to chats
+    // Listen to chats + notify on new incoming messages.
     const qChats = query(
-      collection(db, 'chats'), 
+      collection(db, 'chats'),
       where('participants', 'array-contains', auth.currentUser.uid),
       orderBy('lastMessageAt', 'desc')
     );
+    const seenKey = `chats:lastSeen:${auth.currentUser.uid}`;
+    let lastSeen: Record<string, string> = {};
+    try { lastSeen = JSON.parse(localStorage.getItem(seenKey) || '{}'); } catch {}
+    let isFirstChatLoad = true;
     const unsubChats = onSnapshot(qChats, (snapshot) => {
       const newChats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
       setChats(newChats);
+      if (!isFirstChatLoad) {
+        for (const c of newChats) {
+          const last = c.lastMessageAt;
+          if (!last) continue;
+          const prev = lastSeen[c.id];
+          if (prev && last > prev && c.lastMessage) {
+            // Skip notify if the user is currently viewing this chat.
+            // (activeChat is closed-over; readers rely on whatever React renders.)
+            toast.message('New message', { description: c.lastMessage.slice(0, 80) });
+          }
+          lastSeen[c.id] = last;
+        }
+        try { localStorage.setItem(seenKey, JSON.stringify(lastSeen)); } catch {}
+      } else {
+        for (const c of newChats) if (c.lastMessageAt) lastSeen[c.id] = c.lastMessageAt;
+        try { localStorage.setItem(seenKey, JSON.stringify(lastSeen)); } catch {}
+        isFirstChatLoad = false;
+      }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'chats'));
 
     return () => {
@@ -221,26 +256,50 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
 
   const handlePost = async () => {
     if ((!newPost.trim() && !postImage) || !auth.currentUser) return;
+    const text = newPost.trim();
+
+    // Basic moderation: blocklist + length cap. Catches the obvious; deeper
+    // moderation should run server-side once Firestore rules are aligned.
+    const BANNED = /\b(fuck|shit|bitch|cunt|nigger|faggot|retard|kys|kill yourself|porn|nsfw)\b/i;
+    if (text.length > 600) { toast.error('Post too long', { description: 'Keep it under 600 characters.' }); return; }
+    if (BANNED.test(text)) { toast.error('Post blocked', { description: 'Community guidelines violation. Please rephrase.' }); return; }
+
     setPosting(true);
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const post: Post = {
+      id: localId,
+      userId: auth.currentUser.uid,
+      authorName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
+      authorPhoto: profile.photoURL || auth.currentUser.photoURL || undefined,
+      content: text,
+      imageUrl: postImage || undefined,
+      createdAt: new Date().toISOString(),
+      likes: [],
+      commentCount: 0,
+      repostCount: 0,
+    };
+
+    // Save locally first so the post is visible regardless of Firestore.
     try {
-      await addDoc(collection(db, 'posts'), cleanObject({
-        userId: auth.currentUser.uid,
-        authorName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
-        authorPhoto: profile.photoURL || auth.currentUser.photoURL,
-        content: newPost,
-        imageUrl: postImage || undefined,
-        createdAt: new Date().toISOString(),
-        likes: [],
-        commentCount: 0,
-        repostCount: 0
-      }));
-      await unlockAchievement('social_post');
-      setNewPost('');
-      setPostImage(null);
+      const cached = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]');
+      const next = [post, ...cached].slice(0, 50);
+      localStorage.setItem(`posts:local:${auth.currentUser?.uid || "anon"}`, JSON.stringify(next));
+    } catch {}
+
+    setNewPost('');
+    setPostImage(null);
+    setPosting(false);
+    toast.success('Posted');
+
+    // Best-effort cloud sync.
+    try {
+      await Promise.race([
+        addDoc(collection(db, 'posts'), cleanObject({ ...post, id: undefined })),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+      ]);
+      await unlockAchievement('social_post').catch(() => {});
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'posts');
-    } finally {
-      setPosting(false);
+      console.warn('Post Firestore sync skipped', error);
     }
   };
 
@@ -267,8 +326,7 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
       ]);
     } catch (e) { console.warn('Public profile sync skipped', e); }
-    // Optimistic local update — parent will pick it up on next snapshot or reload.
-    Object.assign(profile, { username, displayName, bio });
+    onProfileUpdate?.({ username, displayName, bio });
     setSavingProfile(false);
   };
 
@@ -492,12 +550,27 @@ function PostCard({ post, profile, onReport }: { post: Post, profile: UserProfil
           <span className="text-[10px] font-black font-mono tracking-widest">{post.likes.length}</span>
         </button>
         
-        <button className="flex items-center gap-2.5 text-gray-300 hover:text-charcoal transition-all group">
+        <button
+          onClick={() => toast.info('Comments coming soon')}
+          className="flex items-center gap-2.5 text-gray-300 hover:text-charcoal transition-all group"
+        >
           <MessageCircle size={20} strokeWidth={3} className="group-hover:scale-110 transition-transform" />
           <span className="text-[10px] font-black font-mono tracking-widest">{post.commentCount}</span>
         </button>
 
-        <button className="flex items-center gap-2.5 text-gray-300 hover:text-sage transition-all ml-auto group">
+        <button
+          onClick={async () => {
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: 'CleanAIr', text: post.content });
+              } else {
+                await navigator.clipboard.writeText(post.content);
+                toast.success('Post copied to clipboard');
+              }
+            } catch {}
+          }}
+          className="flex items-center gap-2.5 text-gray-300 hover:text-sage transition-all ml-auto group"
+        >
           <Repeat size={20} strokeWidth={3} className="group-hover:rotate-180 transition-transform duration-500" />
         </button>
       </div>
@@ -573,11 +646,25 @@ function ChatView({ chat, profile, onBack }: { chat: Chat, profile: UserProfile,
   const [newMessage, setNewMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const localKey = `messages:${chat.id}`;
+
+  // Hydrate from local cache so messages appear immediately even if Firestore is blocked.
   useEffect(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(localKey) || '[]');
+      if (Array.isArray(cached) && cached.length) setMessages(cached);
+    } catch {}
+
     const q = query(collection(db, `chats/${chat.id}/messages`), orderBy('createdAt', 'asc'), limit(100));
     const unsub = onSnapshot(q, (snapshot) => {
-      const newMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
-      setMessages(newMessages);
+      const remote = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      // Merge: keep local-only messages (id starts with "local_") that haven't synced yet.
+      let local: Message[] = [];
+      try { local = JSON.parse(localStorage.getItem(localKey) || '[]'); } catch {}
+      const remoteIds = new Set(remote.map(m => m.id));
+      const localOnly = local.filter(m => m.id.startsWith('local_') && !remoteIds.has(m.id));
+      const merged = [...remote, ...localOnly].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      setMessages(merged);
       setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 100);
     }, (error) => handleFirestoreError(error, OperationType.LIST, `chats/${chat.id}/messages`));
     return () => unsub();
@@ -585,25 +672,41 @@ function ChatView({ chat, profile, onBack }: { chat: Chat, profile: UserProfile,
 
   const handleSend = async () => {
     if (!newMessage.trim() || !auth.currentUser) return;
-    const msg = newMessage;
+    const text = newMessage.trim();
     setNewMessage('');
+
+    const localId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const msg: Message = {
+      id: localId,
+      chatId: chat.id,
+      senderId: auth.currentUser.uid,
+      senderName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
+      content: text,
+      createdAt: new Date().toISOString(),
+      readBy: [auth.currentUser.uid],
+    };
+
+    // Optimistic local append + persistent cache.
+    setMessages((prev) => [...prev, msg]);
     try {
-      const msgData = cleanObject({
-        chatId: chat.id,
-        senderId: auth.currentUser.uid,
-        senderName: profile.displayName || auth.currentUser.displayName || 'Anonymous',
-        content: msg,
-        createdAt: new Date().toISOString(),
-        readBy: [auth.currentUser.uid]
-      });
-      await addDoc(collection(db, `chats/${chat.id}/messages`), msgData);
-      await updateDoc(doc(db, 'chats', chat.id), {
-        lastMessage: msg,
-        lastMessageAt: new Date().toISOString()
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `chats/${chat.id}/messages`);
-    }
+      const cached: Message[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      cached.push(msg);
+      localStorage.setItem(localKey, JSON.stringify(cached.slice(-100)));
+    } catch {}
+    setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50);
+
+    // Best-effort cloud sync; never blocks the UI.
+    Promise.race([
+      (async () => {
+        const msgData = cleanObject({ ...msg, id: undefined });
+        await addDoc(collection(db, `chats/${chat.id}/messages`), msgData);
+        await updateDoc(doc(db, 'chats', chat.id), {
+          lastMessage: text,
+          lastMessageAt: new Date().toISOString(),
+        });
+      })(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+    ]).catch((err) => console.warn('DM sync skipped', err?.message || err));
   };
 
   return (

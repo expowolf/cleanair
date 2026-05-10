@@ -26,8 +26,13 @@ export default function Stats({ profile, onNavigate }: StatsProps) {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  const quitDate = new Date(profile.quitDate);
-  const totalSecs = Math.max(0, Math.floor((now.getTime() - quitDate.getTime()) / 1000));
+  // Recovery clock starts from the most recent reset point: the original
+  // quit date, or the most recent relapse if there has been one.
+  const baseQuit = new Date(profile.quitDate).getTime();
+  const lastRelapse = profile.lastRelapseDate ? new Date(profile.lastRelapseDate).getTime() : 0;
+  const startMs = Math.max(baseQuit, lastRelapse);
+  const quitDate = new Date(startMs);
+  const totalSecs = Math.max(0, Math.floor((now.getTime() - startMs) / 1000));
   const days = Math.floor(totalSecs / 86400);
   const liveHours = Math.floor((totalSecs % 86400) / 3600);
   const liveMins = Math.floor((totalSecs % 3600) / 60);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import Legal from './Legal';
@@ -41,11 +42,12 @@ const DEFAULT_AVATARS = [
 
 interface DashboardProps {
   profile: UserProfile;
+  onProfileUpdate?: (patch: Partial<UserProfile>) => void;
 }
 
 type SettingsSection = 'main' | 'account' | 'profile' | 'personalization' | 'notifications' | 'privacy' | 'appearance' | 'help' | 'about';
 
-export default function Dashboard({ profile }: DashboardProps) {
+export default function Dashboard({ profile, onProfileUpdate }: DashboardProps) {
   const [section, setSection] = useState<SettingsSection>('main');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
@@ -193,7 +195,7 @@ export default function Dashboard({ profile }: DashboardProps) {
       const existing = JSON.parse(localStorage.getItem(key) || '{}');
       localStorage.setItem(key, JSON.stringify({ ...existing, photoURL: url }));
     } catch {}
-    (profile as any).photoURL = url;
+    onProfileUpdate?.({ photoURL: url });
     setShowAvatarPicker(false);
     try {
       await Promise.race([
@@ -269,28 +271,7 @@ export default function Dashboard({ profile }: DashboardProps) {
         </div>
       </div>
 
-      {/* Premium Upgrade */}
-      <motion.div 
-        whileHover={{ scale: 1.02 }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-charcoal p-8 rounded-[48px] text-white relative overflow-hidden shadow-2xl border border-white/5"
-      >
-        <div className="absolute top-0 right-0 w-40 h-40 bg-sage/20 blur-[60px] rounded-full -mr-20 -mt-20 opacity-60" />
-        <div className="relative z-10 flex flex-col gap-6">
-          <div className="flex items-center gap-2">
-            <Zap size={16} className="text-sage" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">CleanAIr Elite</span>
-          </div>
-          <div>
-            <h3 className="text-2xl font-black tracking-tight leading-none mb-1 uppercase">Upgrade Protocol</h3>
-            <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Unlock Elite Recovery Monitoring</p>
-          </div>
-          <button className="w-full py-4 bg-sage text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sage/20 hover:bg-white hover:text-sage transition-all">
-            Unlock Full Potential
-          </button>
-        </div>
-      </motion.div>
+      {/* Premium upgrade card removed — all features are free. */}
 
       <div className="grid grid-cols-2 gap-4">
         {[
@@ -819,7 +800,10 @@ export default function Dashboard({ profile }: DashboardProps) {
 
         <div className="mt-4 p-8 bg-sage/5 rounded-[40px] border border-dashed border-sage/20 text-center">
           <p className="text-xs font-bold text-sage mb-2">Need direct intervention?</p>
-          <button className="px-10 py-4 bg-sage text-white rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-sage/20 active:scale-95 transition-all">
+          <button
+            onClick={() => { window.location.href = 'mailto:support@cleanair.app?subject=CleanAIr%20Support'; }}
+            className="px-10 py-4 bg-sage text-white rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-xl shadow-sage/20 active:scale-95 transition-all"
+          >
             Chat with a Guide
           </button>
         </div>
