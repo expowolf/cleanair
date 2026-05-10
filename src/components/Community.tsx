@@ -79,7 +79,7 @@ export default function Community({ profile, onProfileUpdate }: CommunityProps) 
 
     // Hydrate from local cache first so locally-created posts always appear.
     try {
-      const cached = JSON.parse(localStorage.getItem('posts:local') || '[]');
+      const cached = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]');
       if (Array.isArray(cached) && cached.length) setPosts(cached);
     } catch {}
 
@@ -92,7 +92,7 @@ export default function Community({ profile, onProfileUpdate }: CommunityProps) 
       const remote = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Post));
       // Merge: local-only posts (not yet synced) shown above remote ones.
       let local: Post[] = [];
-      try { local = JSON.parse(localStorage.getItem('posts:local') || '[]'); } catch {}
+      try { local = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]'); } catch {}
       const remoteIds = new Set(remote.map(p => p.id));
       const localOnly = local.filter(p => !remoteIds.has(p.id));
       setPosts([...localOnly, ...remote]);
@@ -281,9 +281,9 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
 
     // Save locally first so the post is visible regardless of Firestore.
     try {
-      const cached = JSON.parse(localStorage.getItem('posts:local') || '[]');
+      const cached = JSON.parse(localStorage.getItem(`posts:local:${auth.currentUser?.uid || "anon"}`) || '[]');
       const next = [post, ...cached].slice(0, 50);
-      localStorage.setItem('posts:local', JSON.stringify(next));
+      localStorage.setItem(`posts:local:${auth.currentUser?.uid || "anon"}`, JSON.stringify(next));
     } catch {}
 
     setNewPost('');

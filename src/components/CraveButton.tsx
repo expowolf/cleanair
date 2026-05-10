@@ -338,10 +338,10 @@ export default function CraveButton() {
                   animate={{ y: 0, opacity: 1 }}
                   className="flex flex-col items-center w-full"
                 >
-                  <h2 className="text-4xl font-extrabold text-charcoal mb-4 text-center tracking-tight">The Root Cause</h2>
-                  <p className="text-gray-400 text-center mb-12 max-w-xs font-medium">Identifying the trigger is the first step to neutralising it.</p>
-                  
-                  <div className="grid grid-cols-2 gap-4 w-full mb-16">
+                  <h2 className="text-2xl sm:text-4xl font-extrabold text-charcoal mb-2 sm:mb-4 text-center tracking-tight">The Root Cause</h2>
+                  <p className="text-xs sm:text-sm text-gray-400 text-center mb-6 sm:mb-12 max-w-xs font-medium">Identifying the trigger is the first step to neutralising it.</p>
+
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 w-full mb-6 sm:mb-16">
                     {['Stress', 'Boredom', 'Anxiety', 'Social', 'Habit', 'Routine'].map((t) => (
                       <button
                         key={t}
@@ -350,7 +350,7 @@ export default function CraveButton() {
                           vibrate(20);
                         }}
                         className={`
-                          py-8 px-4 rounded-3xl font-bold transition-all border-2 flex flex-col items-center gap-2
+                          py-5 sm:py-8 px-3 sm:px-4 rounded-2xl sm:rounded-3xl font-bold transition-all border-2 flex flex-col items-center gap-2
                           ${selectedTrigger === t ? 'bg-orange/5 border-orange text-orange' : 'bg-white border-gray-50 text-gray-400 hover:border-gray-200'}
                         `}
                       >
@@ -376,7 +376,7 @@ export default function CraveButton() {
                   animate={{ opacity: 1 }}
                   className="flex flex-col items-center w-full"
                 >
-                  <div className="text-center mb-16 h-24">
+                  <div className="text-center mb-6 sm:mb-16 h-20 sm:h-24">
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={breathingPhase}
@@ -385,13 +385,13 @@ export default function CraveButton() {
                         exit={{ opacity: 0, y: -10 }}
                         className="flex flex-col items-center"
                       >
-                        <h3 className="text-6xl font-black text-sage mb-3">{BREATHING_PHASES[breathingPhase].text}</h3>
+                        <h3 className="text-4xl sm:text-6xl font-black text-sage mb-2 sm:mb-3">{BREATHING_PHASES[breathingPhase].text}</h3>
                         <p className="text-gray-400 font-bold uppercase tracking-widest text-[10px]">{BREATHING_PHASES[breathingPhase].action}</p>
                       </motion.div>
                     </AnimatePresence>
                   </div>
 
-                  <div className="relative flex items-center justify-center w-80 h-80">
+                  <div className="relative flex items-center justify-center w-60 h-60 sm:w-80 sm:h-80">
                     {/* Background Ring */}
                     <div className="absolute inset-0 rounded-full border-[10px] border-gray-50" />
                     
@@ -418,12 +418,12 @@ export default function CraveButton() {
                     </svg>
                     
                     <div className="flex flex-col items-center">
-                      <LungsIcon className="w-32 h-32 text-sage/40 mb-4" />
+                      <LungsIcon className="w-20 h-20 sm:w-32 sm:h-32 text-sage/40 mb-2 sm:mb-4" />
                       <span className="text-3xl font-black text-charcoal">{countdown}</span>
                     </div>
                   </div>
 
-                  <div className="mt-20 flex gap-4">
+                  <div className="mt-8 sm:mt-20 flex gap-3 sm:gap-4">
                     {BREATHING_PHASES.map((_, i) => (
                       <div 
                         key={i} 

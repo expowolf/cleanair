@@ -271,31 +271,7 @@ export default function Dashboard({ profile, onProfileUpdate }: DashboardProps) 
         </div>
       </div>
 
-      {/* Premium Upgrade */}
-      <motion.div 
-        whileHover={{ scale: 1.02 }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-charcoal p-8 rounded-[48px] text-white relative overflow-hidden shadow-2xl border border-white/5"
-      >
-        <div className="absolute top-0 right-0 w-40 h-40 bg-sage/20 blur-[60px] rounded-full -mr-20 -mt-20 opacity-60" />
-        <div className="relative z-10 flex flex-col gap-6">
-          <div className="flex items-center gap-2">
-            <Zap size={16} className="text-sage" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">CleanAIr Elite</span>
-          </div>
-          <div>
-            <h3 className="text-2xl font-black tracking-tight leading-none mb-1 uppercase">Upgrade Protocol</h3>
-            <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest">Unlock Elite Recovery Monitoring</p>
-          </div>
-          <button
-            onClick={() => toast.info('Premium tier coming soon', { description: 'You\'ll be the first to know when Elite Recovery launches.' })}
-            className="w-full py-4 bg-sage text-white rounded-3xl text-[11px] font-black uppercase tracking-[0.2em] shadow-lg shadow-sage/20 hover:bg-white hover:text-sage transition-all"
-          >
-            Unlock Full Potential
-          </button>
-        </div>
-      </motion.div>
+      {/* Premium upgrade card removed — all features are free. */}
 
       <div className="grid grid-cols-2 gap-4">
         {[
