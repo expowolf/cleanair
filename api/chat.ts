@@ -24,6 +24,11 @@ type OpenRouterModel = {
 
 // Cache the model list across warm invocations of the edge function.
 let MODEL_CACHE: { ids: string[]; expiresAt: number } | null = null;
+// Cache the most recently successful model. Free models flicker in and out
+// of availability — once we find one that works, stick with it instead of
+// rolling the dice every request.
+let LAST_GOOD_MODEL: { id: string; at: number } | null = null;
+const LAST_GOOD_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 async function getFreeModels(apiKey: string): Promise<string[]> {
   if (MODEL_CACHE && MODEL_CACHE.expiresAt > Date.now()) return MODEL_CACHE.ids;
@@ -91,6 +96,11 @@ export default async function handler(req: Request): Promise<Response> {
   const chain: string[] = [];
   if (requested) chain.push(requested);
   if (envModel && !chain.includes(envModel)) chain.push(envModel);
+  // The last model that actually worked is the strongest predictor of the
+  // next success — it lives near the front of the race.
+  if (LAST_GOOD_MODEL && Date.now() - LAST_GOOD_MODEL.at < LAST_GOOD_TTL_MS && !chain.includes(LAST_GOOD_MODEL.id)) {
+    chain.push(LAST_GOOD_MODEL.id);
+  }
   for (const id of prioritizedLive) if (!chain.includes(id)) chain.push(id);
   // Race 4 models in parallel — first one to respond wins.
   const modelChain = chain.slice(0, 4);
@@ -165,6 +175,7 @@ export default async function handler(req: Request): Promise<Response> {
 
   const upstream = winner.res;
   const usedModel = winner.model;
+  LAST_GOOD_MODEL = { id: usedModel, at: Date.now() };
   console.log(`[api/chat] ✓ used=${usedModel}`);
 
   if (body.stream) {
