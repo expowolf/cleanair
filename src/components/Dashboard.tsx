@@ -193,7 +193,10 @@ export default function Dashboard({ profile, onProfileUpdate }: DashboardProps) 
     try {
       const key = `profile:${uid}`;
       const existing = JSON.parse(localStorage.getItem(key) || '{}');
-      localStorage.setItem(key, JSON.stringify({ ...existing, photoURL: url }));
+      const updated = { ...existing, photoURL: url };
+      localStorage.setItem(key, JSON.stringify(updated));
+      const { patchUserDataBestEffort } = await import('../lib/userData');
+      patchUserDataBestEffort(uid, { profile: updated });
     } catch {}
     onProfileUpdate?.({ photoURL: url });
     setShowAvatarPicker(false);

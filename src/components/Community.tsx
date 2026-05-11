@@ -321,6 +321,10 @@ function Feed({ profile, posts, onReport }: { profile: UserProfile, posts: Post[
     const updated = { ...profile, username, displayName, bio };
     try { localStorage.setItem(`profile:${auth.currentUser.uid}`, JSON.stringify(updated)); } catch {}
     try {
+      const { patchUserDataBestEffort } = await import('../lib/userData');
+      patchUserDataBestEffort(auth.currentUser.uid, { profile: updated });
+    } catch {}
+    try {
       await Promise.race([
         updateDoc(doc(db, 'users', auth.currentUser.uid), { username, displayName, bio }),
         new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
