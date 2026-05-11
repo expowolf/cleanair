@@ -14,8 +14,6 @@ interface OnboardingProps {
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<Partial<UserProfile>>({
     triggers: [],
     quitMethod: 'Cold Turkey',
@@ -31,11 +29,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
 
-  const handleComplete = async () => {
+  const handleComplete = () => {
     if (!auth.currentUser) return;
-
-    setLoading(true);
-    setError(null);
 
     const finalProfile: UserProfile = {
       ...profile,
@@ -44,30 +39,24 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       onboardingComplete: true,
     } as UserProfile;
 
-    // Always persist to localStorage so user can enter the app even if the
-    // remote write fails (e.g. Firestore rules reject Supabase-issued auth).
+    // Persist locally first so the app opens instantly.
     try {
       localStorage.setItem(`profile:${auth.currentUser.uid}`, JSON.stringify(finalProfile));
     } catch {}
 
-    // Cross-device sync via Supabase.
-    try {
-      const { patchUserDataBestEffort } = await import('../lib/userData');
-      patchUserDataBestEffort(auth.currentUser.uid, { profile: finalProfile });
-    } catch {}
+    // Fire remote syncs in the background — don't block the user.
+    import('../lib/userData').then(({ patchUserDataBestEffort }) => {
+      patchUserDataBestEffort(auth.currentUser!.uid, { profile: finalProfile });
+    }).catch(() => {});
 
-    // Best-effort sync to Firestore with a 6s timeout so we don't hang forever.
-    try {
-      const write = setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile));
-      await Promise.race([
-        write,
-        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
-      ]);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${auth.currentUser.uid}`);
-      // Don't block — proceed with local profile.
-    }
+    Promise.race([
+      setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile)),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000)),
+    ]).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, `users/${auth.currentUser!.uid}`);
+    });
 
+    // Enter the app immediately — remote writes continue in background.
     onComplete(finalProfile);
   };
 
@@ -325,14 +314,13 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <span className="text-[8px] font-black uppercase tracking-widest">Protocol Anchor Registered</span>
               </div>
             </div>
-            {error && <p className="text-[10px] text-red-500 font-black uppercase mt-4 mb-4">{error}</p>}
             <button
               onClick={handleComplete}
-              disabled={!profile.whyIQuit || loading}
+              disabled={!profile.whyIQuit}
               className="mt-8 w-full py-6 bg-sage text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] shadow-xl shadow-sage/20 active:scale-95 transition-all disabled:opacity-20 flex items-center justify-center gap-2"
             >
-              {loading ? <span className="animate-spin">⟳</span> : <Check size={20} strokeWidth={3} />}
-              {loading ? 'Initializing...' : 'Initialize Journey'}
+              <Check size={20} strokeWidth={3} />
+              Initialize Journey
             </button>
           </StepWrapper>
         );
