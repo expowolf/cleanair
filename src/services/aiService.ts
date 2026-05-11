@@ -56,21 +56,60 @@ function repairJSON(s: string): string {
     firstArr === -1 ? firstObj :
     Math.min(firstObj, firstArr);
   if (start > 0) t = t.slice(start);
-  // Normalize smart quotes and weird whitespace.
+  // Normalize smart quotes.
   t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+
+  // Walk the string and track quote/brace state. If the model stopped
+  // mid-string, truncate back to the last clean position and append the
+  // closers needed to make valid JSON.
+  let inString = false;
+  let escape = false;
+  let lastSafe = -1; // index of last char that's safe to truncate after
+  const stack: string[] = []; // tracks open {/[ for balancing
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (inString) {
+      if (escape) { escape = false; continue; }
+      if (c === '\\') { escape = true; continue; }
+      if (c === '"') { inString = false; lastSafe = i; }
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{' || c === '[') { stack.push(c); lastSafe = i; }
+    else if (c === '}' || c === ']') { stack.pop(); lastSafe = i; }
+    else if (c === ',' || c === ':' || /\s/.test(c)) { lastSafe = i; }
+    else { lastSafe = i; }
+  }
+
+  // If we ended inside an unterminated string, truncate back to the last safe spot.
+  if (inString && lastSafe >= 0) {
+    t = t.slice(0, lastSafe + 1);
+    // Recount stack on truncated text.
+    stack.length = 0;
+    let s2 = false, e2 = false;
+    for (const c of t) {
+      if (s2) {
+        if (e2) { e2 = false; continue; }
+        if (c === '\\') { e2 = true; continue; }
+        if (c === '"') s2 = false;
+        continue;
+      }
+      if (c === '"') s2 = true;
+      else if (c === '{' || c === '[') stack.push(c);
+      else if (c === '}' || c === ']') stack.pop();
+    }
+  }
+
+  // Trim trailing comma that would leave a dangling element.
+  t = t.replace(/,\s*$/, '');
   // Remove trailing commas before } or ].
   t = t.replace(/,(\s*[}\]])/g, '$1');
-  // Balance braces/brackets if the response was truncated.
-  const openObj = (t.match(/\{/g) || []).length;
-  const closeObj = (t.match(/\}/g) || []).length;
-  const openArr = (t.match(/\[/g) || []).length;
-  const closeArr = (t.match(/\]/g) || []).length;
-  // If the last char isn't a closer, the model may have stopped mid-token — chop trailing junk.
-  const lastCloser = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
-  if (lastCloser !== -1 && lastCloser < t.length - 1) t = t.slice(0, lastCloser + 1);
-  // Append missing closers.
-  for (let i = 0; i < openArr - closeArr; i++) t += ']';
-  for (let i = 0; i < openObj - closeObj; i++) t += '}';
+
+  // Append the closers in correct reverse order.
+  while (stack.length) {
+    const open = stack.pop()!;
+    t += open === '{' ? '}' : ']';
+  }
   return t;
 }
 
