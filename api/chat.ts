@@ -48,10 +48,11 @@ export default async function handler(req: Request): Promise<Response> {
   // Caller can override by passing body.model or setting OPENROUTER_MODEL env var.
   const FREE_FALLBACKS = [
     'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemini-2.0-flash-exp:free',
     'google/gemma-2-9b-it:free',
     'mistralai/mistral-7b-instruct:free',
+    'qwen/qwen-2.5-7b-instruct:free',
     'meta-llama/llama-3.2-3b-instruct:free',
+    'meta-llama/llama-3.1-8b-instruct:free',
   ];
   const requested = body.model || process.env.OPENROUTER_MODEL;
   const modelChain = requested ? [requested, ...FREE_FALLBACKS.filter(m => m !== requested)] : FREE_FALLBACKS;
@@ -98,7 +99,7 @@ export default async function handler(req: Request): Promise<Response> {
     // Retry on rate-limit / upstream provider errors with the next model in the chain.
     lastErrorText = await upstream.text();
     console.error(`[api/chat] ${model} → ${upstream.status}: ${lastErrorText.slice(0, 200)}`);
-    if (upstream.status !== 429 && upstream.status !== 502 && upstream.status !== 503) break;
+    if (upstream.status !== 429 && upstream.status !== 404 && upstream.status !== 502 && upstream.status !== 503) break;
   }
 
   if (!upstream || !upstream.ok) {
