@@ -36,7 +36,15 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   const [generating, setGenerating] = useState(false);
   const [showGoalInput, setShowGoalInput] = useState(false);
   const [goalText, setGoalText] = useState("");
+  const [goalStep, setGoalStep] = useState<'goal' | 'questions'>('goal');
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [aiDebug, setAiDebug] = useState<string | null>(null);
+
+  const FOLLOW_UP_QUESTIONS = [
+    { id: 'q1', label: 'Current experience level', placeholder: 'e.g. complete beginner, intermediate, advanced' },
+    { id: 'q2', label: 'How many minutes can you commit daily?', placeholder: 'e.g. 15 minutes, 30 minutes, 1 hour' },
+    { id: 'q3', label: "Biggest obstacle you've hit before?", placeholder: 'e.g. lack of time, motivation drops, no equipment' },
+  ];
   
   // Task Help State
   const [helpData, setHelpData] = useState<{ title: string; explanation: string; youtubeLink: string } | null>(null);
@@ -107,11 +115,18 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
 
   const startGoalFlow = async () => {
     if (!goalText.trim()) return;
-    handleGeneratePlan(goalText);
+    // Advance to follow-up questions step instead of generating immediately.
+    setGoalStep('questions');
   };
 
   const finalizePlan = () => {
-    handleGeneratePlan(goalText);
+    const context = {
+      level: questionAnswers.q1 || 'beginner',
+      availability: questionAnswers.q2 || '15 minutes',
+      motivation: questionAnswers.q3 || '',
+      answers: questionAnswers,
+    };
+    handleGeneratePlan(goalText, context);
   };
 
   const toggleTask = async (taskId: string) => {
@@ -222,7 +237,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
           <h2 className="text-xl font-bold text-charcoal">Update Your Plan</h2>
           <p className="text-sm text-gray-500">We've upgraded our plan generator! Please update your focus to get a more structured "Level Up" plan.</p>
           <button 
-            onClick={() => setShowGoalInput(true)}
+            onClick={() => { setShowGoalInput(true); setGoalStep("goal"); setQuestionAnswers({}); }}
             className="w-full py-4 bg-sage text-white rounded-full font-bold mt-4"
           >
             Update My Plan
@@ -409,7 +424,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
         </div>
 
         <button
-          onClick={() => setShowGoalInput(true)}
+          onClick={() => { setShowGoalInput(true); setGoalStep("goal"); setQuestionAnswers({}); }}
           className="mt-4 py-4 text-gray-400 font-bold text-sm hover:text-charcoal transition-colors"
         >
           Reset & Create New Plan
@@ -445,7 +460,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
           )}
         </div>
         <button 
-          onClick={() => setShowGoalInput(true)}
+          onClick={() => { setShowGoalInput(true); setGoalStep("goal"); setQuestionAnswers({}); }}
           className="p-2 bg-white rounded-full card-shadow text-sage flex items-center gap-2 text-xs font-bold px-4"
         >
           <Zap size={14} />
@@ -471,7 +486,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
             Generate Default Plan
           </button>
           <button 
-            onClick={() => setShowGoalInput(true)}
+            onClick={() => { setShowGoalInput(true); setGoalStep("goal"); setQuestionAnswers({}); }}
             className="text-sage font-bold text-sm"
           >
             I have a specific goal in mind
@@ -496,40 +511,85 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
                   >
                     <X size={24} />
                   </button>
-                  <div className="w-12 h-12 bg-sage/10 rounded-full flex items-center justify-center text-sage">
-                    <Target size={24} />
-                  </div>
-                  <h2 className="text-xl font-bold text-charcoal">What's your focus?</h2>
-                  <p className="text-sm text-gray-500">Instead of just "quitting", what is one big dream you want to achieve with the extra time and money? We'll tailor your daily routine to help you reach it.</p>
 
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {['Run a 5k', 'Build a Car', 'Learn to Code', 'Write a Book', 'Master Cooking'].map(g => (
+                  {goalStep === 'goal' && (
+                    <>
+                      <div className="w-12 h-12 bg-sage/10 rounded-full flex items-center justify-center text-sage">
+                        <Target size={24} />
+                      </div>
+                      <h2 className="text-xl font-bold text-charcoal">What's your focus?</h2>
+                      <p className="text-sm text-gray-500">Instead of just "quitting", what is one big dream you want to achieve with the extra time and money? We'll tailor your daily routine to help you reach it.</p>
+
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {['Run a 5k', 'Build a Car', 'Learn to Code', 'Write a Book', 'Master Cooking'].map(g => (
+                          <button
+                            key={g}
+                            onClick={() => setGoalText(g)}
+                            className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${goalText === g ? 'bg-sage text-white border-sage' : 'bg-white text-gray-500 border-gray-200 hover:border-sage'}`}
+                          >
+                            {g}
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        value={goalText}
+                        onChange={(e) => setGoalText(e.target.value)}
+                        placeholder="e.g. I want to build a custom drift car and learn how to swap an engine..."
+                        className="w-full p-6 bg-gray-50 rounded-[32px] text-sm border border-gray-100 focus:ring-2 focus:ring-sage outline-none min-h-[160px] font-bold text-charcoal placeholder:text-gray-200 transition-all"
+                      />
+                    </>
+                  )}
+
+                  {goalStep === 'questions' && (
+                    <>
+                      <div className="w-12 h-12 bg-sage/10 rounded-full flex items-center justify-center text-sage">
+                        <Zap size={24} />
+                      </div>
+                      <h2 className="text-xl font-bold text-charcoal">A few quick questions</h2>
+                      <p className="text-sm text-gray-500">So we can tailor your plan for <span className="font-bold text-charcoal">{goalText}</span>.</p>
+
+                      {FOLLOW_UP_QUESTIONS.map((q) => (
+                        <div key={q.id} className="flex flex-col gap-2">
+                          <label className="text-[11px] font-bold uppercase tracking-widest text-charcoal">{q.label}</label>
+                          <input
+                            type="text"
+                            value={questionAnswers[q.id] || ''}
+                            onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                            placeholder={q.placeholder}
+                            className="w-full p-4 bg-gray-50 rounded-2xl text-sm border border-gray-100 focus:ring-2 focus:ring-sage outline-none font-medium text-charcoal placeholder:text-gray-300"
+                          />
+                        </div>
+                      ))}
+
                       <button
-                        key={g}
-                        onClick={() => setGoalText(g)}
-                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${goalText === g ? 'bg-sage text-white border-sage' : 'bg-white text-gray-500 border-gray-200 hover:border-sage'}`}
+                        onClick={() => setGoalStep('goal')}
+                        className="text-[11px] font-bold uppercase tracking-widest text-gray-400 self-start"
                       >
-                        {g}
+                        ← back to goal
                       </button>
-                    ))}
-                  </div>
-
-                  <textarea
-                    value={goalText}
-                    onChange={(e) => setGoalText(e.target.value)}
-                    placeholder="e.g. I want to build a custom drift car and learn how to swap an engine..."
-                    className="w-full p-6 bg-gray-50 rounded-[32px] text-sm border border-gray-100 focus:ring-2 focus:ring-sage outline-none min-h-[160px] font-bold text-charcoal placeholder:text-gray-200 transition-all"
-                  />
+                    </>
+                  )}
                 </div>
               </div>
               <div className="p-6 pb-10 bg-background border-t border-gray-100">
-                <button
-                  onClick={startGoalFlow}
-                  disabled={!goalText.trim() || generating}
-                  className="w-full max-w-sm mx-auto block py-5 bg-charcoal text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2 disabled:opacity-20 shadow-xl shadow-charcoal/20 active:scale-95 transition-all"
-                >
-                  {generating ? <Loader2 className="animate-spin" size={20} /> : 'Initialize Protocol'}
-                </button>
+                {goalStep === 'goal' ? (
+                  <button
+                    onClick={startGoalFlow}
+                    disabled={!goalText.trim() || generating}
+                    className="w-full max-w-sm mx-auto block py-5 bg-charcoal text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2 disabled:opacity-20 shadow-xl shadow-charcoal/20 active:scale-95 transition-all"
+                  >
+                    Next: Tailor your plan
+                  </button>
+                ) : (
+                  <button
+                    onClick={finalizePlan}
+                    disabled={generating}
+                    className="w-full max-w-sm mx-auto block py-5 bg-charcoal text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.3em] flex items-center justify-center gap-2 disabled:opacity-20 shadow-xl shadow-charcoal/20 active:scale-95 transition-all"
+                  >
+                    {generating ? <Loader2 className="animate-spin" size={20} /> : 'Initialize Protocol'}
+                  </button>
+                )}
               </div>
             </motion.div>
           )}
