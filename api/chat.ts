@@ -1,15 +1,9 @@
 // Vercel serverless function: POST /api/chat
 // Server-side OpenRouter proxy. Keeps the API key off the client bundle.
 //
-// Request body (JSON):
-//   {
-//     messages: [{ role: 'user'|'system'|'assistant', content: string }],
-//     model?: string,           // default: env OPENROUTER_MODEL or "openai/gpt-4o-mini"
-//     maxTokens?: number,       // default: 800
-//     json?: boolean,           // request JSON-formatted output
-//     stream?: boolean          // SSE streaming
-//   }
-// Response: passthrough of OpenRouter's response (JSON or text/event-stream).
+// Strategy: pull OpenRouter's live model catalog at request time, pick a free
+// model that actually exists today, and fall through to others on rate-limit.
+// Avoids stale hardcoded model names that 404 when OpenRouter retires them.
 
 export const config = { runtime: 'edge' };
 
@@ -21,6 +15,38 @@ type ChatBody = {
   json?: boolean;
   stream?: boolean;
 };
+
+type OpenRouterModel = {
+  id: string;
+  pricing?: { prompt?: string; completion?: string };
+  context_length?: number;
+};
+
+// Cache the model list across warm invocations of the edge function.
+let MODEL_CACHE: { ids: string[]; expiresAt: number } | null = null;
+
+async function getFreeModels(apiKey: string): Promise<string[]> {
+  if (MODEL_CACHE && MODEL_CACHE.expiresAt > Date.now()) return MODEL_CACHE.ids;
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!res.ok) throw new Error(`models list ${res.status}`);
+    const json = await res.json();
+    const all: OpenRouterModel[] = json.data || [];
+    // A "free" model has both prompt and completion price == "0".
+    const free = all
+      .filter((m) => m.pricing?.prompt === '0' && m.pricing?.completion === '0')
+      .map((m) => m.id);
+    // Cache for 10 minutes.
+    MODEL_CACHE = { ids: free, expiresAt: Date.now() + 10 * 60 * 1000 };
+    console.log(`[api/chat] discovered ${free.length} free models`);
+    return free;
+  } catch (e) {
+    console.error('[api/chat] could not fetch model list:', (e as Error).message);
+    return [];
+  }
+}
 
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
@@ -44,24 +70,31 @@ export default async function handler(req: Request): Promise<Response> {
     return json({ error: 'messages[] is required.' }, 400);
   }
 
-  // Free-tier fallback chain: when one model is rate-limited (429), try the next.
-  // Caller can override by passing body.model or setting OPENROUTER_MODEL env var.
-  const FREE_FALLBACKS = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'google/gemma-2-9b-it:free',
-    'mistralai/mistral-7b-instruct:free',
-    'qwen/qwen-2.5-7b-instruct:free',
-    'meta-llama/llama-3.2-3b-instruct:free',
-    'meta-llama/llama-3.1-8b-instruct:free',
-  ];
-  const requested = body.model || process.env.OPENROUTER_MODEL;
-  const modelChain = requested ? [requested, ...FREE_FALLBACKS.filter(m => m !== requested)] : FREE_FALLBACKS;
+  // Build the model chain:
+  // 1. caller-requested model (if any)
+  // 2. OPENROUTER_MODEL env var (if set)
+  // 3. live free models discovered from OpenRouter's catalog
+  const requested = body.model;
+  const envModel = process.env.OPENROUTER_MODEL;
+  const live = await getFreeModels(apiKey);
+
+  const chain: string[] = [];
+  if (requested) chain.push(requested);
+  if (envModel && !chain.includes(envModel)) chain.push(envModel);
+  for (const id of live) if (!chain.includes(id)) chain.push(id);
+  // Hard cap so a runaway chain can't blow the function budget.
+  const modelChain = chain.slice(0, 10);
+
+  if (modelChain.length === 0) {
+    return json({ error: 'No models available. OpenRouter catalog returned empty list.' }, 502);
+  }
 
   const origin = req.headers.get('origin') || 'https://cleanair.app';
 
   let upstream: Response | null = null;
   let lastErrorText = '';
   let usedModel = '';
+  const triedSummary: { model: string; status: number }[] = [];
 
   for (const model of modelChain) {
     const openrouterBody: Record<string, unknown> = {
@@ -96,21 +129,27 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (upstream.ok) { usedModel = model; break; }
 
-    // Retry on rate-limit / upstream provider errors with the next model in the chain.
     lastErrorText = await upstream.text();
+    triedSummary.push({ model, status: upstream.status });
     console.error(`[api/chat] ${model} → ${upstream.status}: ${lastErrorText.slice(0, 200)}`);
-    if (upstream.status !== 429 && upstream.status !== 404 && upstream.status !== 502 && upstream.status !== 503) break;
+    // Retry on transient / "not for this account" errors. Stop on auth or bad request.
+    if (![404, 429, 502, 503].includes(upstream.status)) break;
+    // Invalidate model cache if we got a 404 — the catalog may have shifted.
+    if (upstream.status === 404) MODEL_CACHE = null;
   }
 
   if (!upstream || !upstream.ok) {
-    return new Response(lastErrorText || JSON.stringify({ error: 'All models failed.' }), {
-      status: upstream?.status ?? 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json(
+      {
+        error: 'All AI models failed.',
+        tried: triedSummary,
+        lastError: lastErrorText.slice(0, 500),
+      },
+      upstream?.status ?? 502
+    );
   }
   console.log(`[api/chat] ✓ used=${usedModel}`);
 
-  // Streaming: pipe through as text/event-stream
   if (body.stream) {
     return new Response(upstream.body, {
       status: 200,
@@ -122,7 +161,6 @@ export default async function handler(req: Request): Promise<Response> {
     });
   }
 
-  // Non-streaming: return JSON as-is
   const data = await upstream.json();
   return json(data, 200);
 }
