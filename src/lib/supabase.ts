@@ -14,4 +14,15 @@ if (!url || !key) {
   throw new Error(msg);
 }
 
-export const supabase = createClient(url, key);
+// Explicitly persist the session in localStorage so users stay logged in across
+// reloads and when the app is launched standalone from the home screen (PWA).
+// `persistSession` + `autoRefreshToken` are Supabase defaults, but we set them
+// explicitly so they can't silently change.
+export const supabase = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});

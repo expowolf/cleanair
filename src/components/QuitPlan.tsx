@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Calendar, Target, Edit2, ChevronRight, CheckCircle2, Circle, Loader2, Send, Plus, ThumbsUp, ThumbsDown, Zap, Trophy, HelpCircle, Youtube, ExternalLink, X } from 'lucide-react';
+import { Calendar, Target, Edit2, ChevronRight, CheckCircle2, Circle, Loader2, Send, Plus, ThumbsUp, ThumbsDown, Zap, Trophy, HelpCircle, Youtube, ExternalLink, X, Flame, Bell, BellOff } from 'lucide-react';
 import { UserProfile, QuitPlan as IQuitPlan, DailyTask } from '../types';
 import { format } from 'date-fns';
 import { generatePersonalizedPlan, adjustPlan } from '../services/quitPlanService';
@@ -10,6 +10,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, onSnapshot } from 'firebase
 import { handleFirestoreError, cleanObject } from '../lib/firestore';
 import { OperationType } from '../types';
 import { checkAchievements } from '../services/achievementService';
+import { getStreak, markTodayActive, notifPermission, requestNotifications, scheduleDailyReminder, fireStreakNotification, NotifPermission } from '../services/streakService';
 
 interface QuitPlanProps {
   profile: UserProfile;
@@ -39,6 +40,25 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
   const [goalStep, setGoalStep] = useState<'goal' | 'questions'>('goal');
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [aiDebug, setAiDebug] = useState<string | null>(null);
+  const [streak, setStreakState] = useState<{ current: number; longest: number }>({ current: 0, longest: 0 });
+  const [notif, setNotif] = useState<NotifPermission>('default');
+
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    if (uid) setStreakState(getStreak(uid));
+    const perm = notifPermission();
+    setNotif(perm);
+    if (perm === 'granted') scheduleDailyReminder();
+  }, []);
+
+  const handleEnableNotifications = async () => {
+    const result = await requestNotifications();
+    setNotif(result);
+    if (result === 'granted') {
+      scheduleDailyReminder();
+      try { new Notification('CleanAIr', { body: 'Reminders on. We\'ll nudge you daily.' }); } catch {}
+    }
+  };
 
   const FOLLOW_UP_QUESTIONS = [
     { id: 'q1', label: 'Current experience level', placeholder: 'e.g. complete beginner, intermediate, advanced' },
@@ -161,23 +181,31 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
     ]).catch((err) => console.warn('Task toggle sync skipped', err?.message || err));
 
     if (isCompleting) {
+      const before = getStreak(uid).current;
+      const next = markTodayActive(uid);
+      setStreakState(next);
+      if (next.current > before) fireStreakNotification(next.current);
+
       Promise.race([
         (async () => {
           const progressRef = doc(db, 'progress', uid);
           const progressSnap = await getDoc(progressRef);
           if (progressSnap.exists()) {
             const data = progressSnap.data();
+            const s = getStreak(uid);
             await updateDoc(progressRef, {
               tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1,
               goalsCompleted: (data.goalsCompleted || 0) + 1,
+              longestStreak: Math.max(data.longestStreak || 0, s.longest),
               lastUpdated: new Date().toISOString()
             });
-            checkAchievements({ ...data, tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1 } as any);
+            checkAchievements({ ...data, tasksCompletedTotal: (data.tasksCompletedTotal || 0) + 1, longestStreak: Math.max(data.longestStreak || 0, s.longest) } as any);
           } else {
+            const s = getStreak(uid);
             await setDoc(progressRef, {
               uid, streakData: {}, goalsCompleted: 1, moneySaved: 0,
               cravingsResisted: 0, cravingsTotal: 0, tasksCompletedTotal: 1,
-              longestStreak: 0, lastUpdated: new Date().toISOString()
+              longestStreak: s.longest, lastUpdated: new Date().toISOString()
             });
           }
         })(),
@@ -261,6 +289,38 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
 
     return (
       <div className="flex flex-col gap-8 pb-32">
+        {/* Streak & Reminders */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="bg-gradient-to-br from-orange to-secondary p-5 rounded-[24px] text-white card-shadow flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <Flame size={20} className={streak.current > 0 ? 'glow-hot' : ''} />
+              <span className="text-[10px] font-black uppercase tracking-widest opacity-90">Current Streak</span>
+            </div>
+            <div className="text-4xl font-black tracking-tighter font-mono leading-none mt-1">{streak.current}</div>
+            <div className="text-[10px] font-bold opacity-80">days · best {streak.longest}</div>
+          </div>
+          <button
+            onClick={notif === 'granted' ? undefined : handleEnableNotifications}
+            disabled={notif === 'unsupported' || notif === 'denied'}
+            className={`p-5 rounded-[24px] flex flex-col items-start justify-between text-left card-shadow ${
+              notif === 'granted' ? 'bg-sage text-white' : 'bg-white text-charcoal'
+            } ${notif === 'unsupported' || notif === 'denied' ? 'opacity-60' : 'active:scale-95'} transition-all`}
+          >
+            <div className="flex items-center gap-2">
+              {notif === 'granted' ? <Bell size={20} /> : <BellOff size={20} className="text-sage" />}
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {notif === 'granted' ? 'Reminders On' : 'Reminders'}
+              </span>
+            </div>
+            <div className="text-xs font-bold opacity-80 mt-2 leading-snug">
+              {notif === 'granted' && "We'll ping you daily so the streak doesn't die."}
+              {notif === 'default' && 'Enable notifications to keep your streak alive.'}
+              {notif === 'denied' && 'Blocked — re-enable in your browser settings.'}
+              {notif === 'unsupported' && 'Not supported on this device.'}
+            </div>
+          </button>
+        </div>
+
         {/* Goal Summary */}
         <div className="bg-white p-6 rounded-[32px] card-shadow border-t-4 border-sage">
           <div className="flex items-center gap-3 mb-4">
