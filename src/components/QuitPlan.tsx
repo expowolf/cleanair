@@ -65,7 +65,15 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
     const unsubscribe = onSnapshot(doc(db, 'plans', auth.currentUser.uid), (docSnap) => {
       if (docSnap.exists()) {
         const planData = docSnap.data() as IQuitPlan;
-        setPlan(planData);
+        // Only override the in-memory plan if Firestore actually has something newer.
+        // Otherwise a stale Firestore snapshot wipes a freshly-generated AI plan
+        // when the Firestore write was rejected (the bug users hit on mobile).
+        setPlan((current) => {
+          if (!current) return planData;
+          const remoteTime = new Date(planData.generatedAt || 0).getTime();
+          const localTime = new Date(current.generatedAt || 0).getTime();
+          return remoteTime > localTime ? planData : current;
+        });
 
         if (planData.status === 'adjusting' && !generating) {
           handleGeneratePlan();
