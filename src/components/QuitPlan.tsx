@@ -210,10 +210,15 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
 
   const handleGetHelp = async (task: DailyTask) => {
     setLoadingHelp(task.id);
-    // Deterministic lookup
-    const help = STATIC_TASK_HELP[task.title] || { 
-      explanation: "Focus on excellence. Consistency is your most powerful asset in this transition.", 
-      youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(task.title + " tutorial")}` 
+    // Search query combines task + the user's goal + task description so YouTube
+    // returns videos relevant to what the user is actually doing, not generic
+    // tutorials that happen to share keywords.
+    const goal = plan?.goal && plan.goal !== 'General Cessation' ? plan.goal : '';
+    const descSnippet = (task.description || '').split(/[.,]/)[0].slice(0, 60);
+    const query = [task.title, goal, descSnippet, 'how to'].filter(Boolean).join(' ');
+    const help = STATIC_TASK_HELP[task.title] || {
+      explanation: "Focus on excellence. Consistency is your most powerful asset in this transition.",
+      youtubeLink: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`
     };
     
     setHelpData({ 
