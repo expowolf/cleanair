@@ -41,20 +41,48 @@ export async function aiChat(
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-// Returns parsed JSON; tolerates models that wrap JSON in markdown fences.
+// Free LLMs sometimes emit slightly malformed JSON (trailing commas, smart quotes,
+// truncation mid-object). This repairs common issues before JSON.parse.
+function repairJSON(s: string): string {
+  let t = s.trim();
+  // Strip markdown fences if present.
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence) t = fence[1].trim();
+  // Locate first { or [ — drop any leading prose.
+  const firstObj = t.indexOf('{');
+  const firstArr = t.indexOf('[');
+  const start =
+    firstObj === -1 ? firstArr :
+    firstArr === -1 ? firstObj :
+    Math.min(firstObj, firstArr);
+  if (start > 0) t = t.slice(start);
+  // Normalize smart quotes and weird whitespace.
+  t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+  // Remove trailing commas before } or ].
+  t = t.replace(/,(\s*[}\]])/g, '$1');
+  // Balance braces/brackets if the response was truncated.
+  const openObj = (t.match(/\{/g) || []).length;
+  const closeObj = (t.match(/\}/g) || []).length;
+  const openArr = (t.match(/\[/g) || []).length;
+  const closeArr = (t.match(/\]/g) || []).length;
+  // If the last char isn't a closer, the model may have stopped mid-token — chop trailing junk.
+  const lastCloser = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
+  if (lastCloser !== -1 && lastCloser < t.length - 1) t = t.slice(0, lastCloser + 1);
+  // Append missing closers.
+  for (let i = 0; i < openArr - closeArr; i++) t += ']';
+  for (let i = 0; i < openObj - closeObj; i++) t += '}';
+  return t;
+}
+
+// Returns parsed JSON; tolerates models that wrap JSON in markdown fences,
+// trailing commas, smart quotes, and truncation.
 export async function aiJSON<T>(messages: Msg[], maxTokens = 800): Promise<T> {
   const text = await aiChat(messages, { json: true, maxTokens });
-  let cleaned = text.trim();
-  const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fence) cleaned = fence[1].trim();
-  if (cleaned[0] !== '{' && cleaned[0] !== '[') {
-    const m = cleaned.match(/[{\[][\s\S]*[}\]]/);
-    if (m) cleaned = m[0];
-  }
+  const cleaned = repairJSON(text);
   try {
     return JSON.parse(cleaned) as T;
   } catch (e) {
-    console.error('aiJSON parse failed. Raw response:', text);
+    console.error('aiJSON parse failed. Repaired:', cleaned.slice(0, 500), '\nRaw response:', text);
     throw new Error(`AI returned invalid JSON: ${(e as Error).message}`);
   }
 }
@@ -98,5 +126,5 @@ Motivation: ${args.profile.motivationLevel ?? 7}/10`;
   return aiJSON([
     { role: 'system', content: sys },
     { role: 'user', content: user },
-  ], 1200);
+  ], 2000);
 }
