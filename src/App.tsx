@@ -154,10 +154,10 @@ export default function App() {
   };
 
   const fetchProfile = async (u: User) => {
-    // Try Supabase first (cross-device truth), then localStorage cache.
+    let remote: any = null;
     try {
-      const { loadUserData } = await import('./lib/userData');
-      const remote = await Promise.race([
+      const { loadUserData, patchUserDataBestEffort } = await import('./lib/userData');
+      remote = await Promise.race([
         loadUserData(u.id),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
       ]);
@@ -168,11 +168,24 @@ export default function App() {
         setLoading(false);
         return;
       }
+      // No remote row yet — if we have local data, push it up so the OTHER
+      // device can pull it next time it logs in.
+      try {
+        const cachedProfile = localStorage.getItem(`profile:${u.id}`);
+        const cachedPlan = localStorage.getItem(`plan:${u.id}`);
+        const patch: any = {};
+        if (cachedProfile) patch.profile = JSON.parse(cachedProfile);
+        if (cachedPlan) patch.plan = JSON.parse(cachedPlan);
+        if (patch.profile || patch.plan) {
+          patchUserDataBestEffort(u.id, patch);
+          console.log('[userData] uploaded local data to Supabase for cross-device sync');
+        }
+      } catch {}
     } catch (err) {
       console.warn('Supabase profile fetch failed', err);
     }
 
-    // Fallback: localStorage cache from previous session on this device.
+    // Fallback: render from localStorage so the user gets in immediately.
     try {
       const cached = localStorage.getItem(`profile:${u.id}`);
       if (cached) setProfile(JSON.parse(cached) as UserProfile);
