@@ -51,9 +51,13 @@ export default async function handler(req: Request): Promise<Response> {
     model,
     messages: body.messages,
     max_tokens: body.maxTokens ?? 800,
+    temperature: 0.7,
     stream: !!body.stream,
   };
-  if (body.json && !body.stream) {
+  // Only request structured JSON output for models known to support it.
+  // Free Llama tiers reject `response_format`; aiJSON strips markdown fences instead.
+  const supportsJsonMode = /openai|anthropic|google\/gemini-(1\.5|2)/i.test(model);
+  if (body.json && !body.stream && supportsJsonMode) {
     openrouterBody.response_format = { type: 'json_object' };
   }
 
