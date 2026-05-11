@@ -78,13 +78,22 @@ export default async function handler(req: Request): Promise<Response> {
   const envModel = process.env.OPENROUTER_MODEL;
   const live = await getFreeModels(apiKey);
 
+  // Reorder live catalog to prefer small/fast free models first. Big 70B+
+  // models on free tier are notoriously slow and often time out.
+  const FAST_PATTERNS = [
+    /llama-3\.2-3b/i, /llama-3\.1-8b/i, /gemma-2-9b/i, /qwen.*7b/i,
+    /mistral-7b/i, /phi-3/i, /gemini-flash/i,
+  ];
+  const fast = live.filter((id) => FAST_PATTERNS.some((re) => re.test(id)));
+  const rest = live.filter((id) => !fast.includes(id));
+  const prioritizedLive = [...fast, ...rest];
+
   const chain: string[] = [];
   if (requested) chain.push(requested);
   if (envModel && !chain.includes(envModel)) chain.push(envModel);
-  for (const id of live) if (!chain.includes(id)) chain.push(id);
-  // Hard cap on attempts so total time stays under Vercel's 25s Edge limit
-  // (each attempt gets ~10s, so 3 attempts max = 30s worst case but most return faster).
-  const modelChain = chain.slice(0, 3);
+  for (const id of prioritizedLive) if (!chain.includes(id)) chain.push(id);
+  // Race 4 models in parallel — first one to respond wins.
+  const modelChain = chain.slice(0, 4);
 
   if (modelChain.length === 0) {
     return json({ error: 'No models available. OpenRouter catalog returned empty list.' }, 502);
@@ -92,12 +101,15 @@ export default async function handler(req: Request): Promise<Response> {
 
   const origin = req.headers.get('origin') || 'https://cleanair.app';
 
-  let upstream: Response | null = null;
-  let lastErrorText = '';
-  let usedModel = '';
+  // Race models in parallel — whichever returns first wins, the rest abort.
+  // This keeps us safely under Vercel's 25s Edge limit even if some free
+  // models are completely unresponsive (sequential retries used to hit 504).
+  const controllers = modelChain.map(() => new AbortController());
+  const PER_REQUEST_TIMEOUT = 20000;
+  const timers = controllers.map((c) => setTimeout(() => c.abort(), PER_REQUEST_TIMEOUT));
   const triedSummary: { model: string; status: number }[] = [];
 
-  for (const model of modelChain) {
+  const attempts = modelChain.map((model, idx) => {
     const openrouterBody: Record<string, unknown> = {
       model,
       messages: body.messages,
@@ -110,55 +122,49 @@ export default async function handler(req: Request): Promise<Response> {
       openrouterBody.response_format = { type: 'json_object' };
     }
 
-    console.log(`[api/chat] → model=${model} msgs=${body.messages.length} stream=${!!body.stream}`);
+    console.log(`[api/chat] → race model=${model}`);
 
-    // Per-model timeout so one slow model can't burn the whole 25s Vercel budget.
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 18000);
-    try {
-      upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': origin,
-          'X-Title': 'CleanAIr',
-        },
-        body: JSON.stringify(openrouterBody),
-        signal: controller.signal,
-      });
-    } catch (err: any) {
-      clearTimeout(timer);
-      const isTimeout = err?.name === 'AbortError';
-      console.error(`[api/chat] ${model} ${isTimeout ? 'timed out' : 'fetch threw'}:`, err?.message || err);
-      triedSummary.push({ model, status: isTimeout ? 504 : 0 });
-      lastErrorText = JSON.stringify({ error: isTimeout ? 'Upstream timeout' : String(err?.message || err) });
-      if (isTimeout) continue;
-      return json({ error: 'Network error reaching OpenRouter.', detail: String(err?.message || err) }, 502);
-    }
-    clearTimeout(timer);
-
-    if (upstream.ok) { usedModel = model; break; }
-
-    lastErrorText = await upstream.text();
-    triedSummary.push({ model, status: upstream.status });
-    console.error(`[api/chat] ${model} → ${upstream.status}: ${lastErrorText.slice(0, 200)}`);
-    // Retry on transient / "not for this account" errors. Stop on auth or bad request.
-    if (![404, 429, 502, 503].includes(upstream.status)) break;
-    // Invalidate model cache if we got a 404 — the catalog may have shifted.
-    if (upstream.status === 404) MODEL_CACHE = null;
-  }
-
-  if (!upstream || !upstream.ok) {
-    return json(
-      {
-        error: 'All AI models failed.',
-        tried: triedSummary,
-        lastError: lastErrorText.slice(0, 500),
+    return fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': origin,
+        'X-Title': 'CleanAIr',
       },
-      upstream?.status ?? 502
+      body: JSON.stringify(openrouterBody),
+      signal: controllers[idx].signal,
+    }).then(async (res) => {
+      if (!res.ok) {
+        const txt = await res.text();
+        triedSummary.push({ model, status: res.status });
+        if (res.status === 404) MODEL_CACHE = null;
+        throw new Error(`${model} ${res.status}: ${txt.slice(0, 200)}`);
+      }
+      return { model, res };
+    });
+  });
+
+  let winner: { model: string; res: Response };
+  try {
+    winner = await Promise.any(attempts);
+  } catch (err: any) {
+    timers.forEach(clearTimeout);
+    controllers.forEach((c) => { try { c.abort(); } catch {} });
+    const messages = (err?.errors || []).map((e: Error) => e.message).join(' | ');
+    console.error('[api/chat] all racers failed:', messages);
+    return json(
+      { error: 'All AI models failed.', tried: triedSummary, lastError: messages.slice(0, 500) },
+      502
     );
   }
+
+  // Abort the losing requests so upstream connections close promptly.
+  controllers.forEach((c, i) => { if (modelChain[i] !== winner.model) { try { c.abort(); } catch {} } });
+  timers.forEach(clearTimeout);
+
+  const upstream = winner.res;
+  const usedModel = winner.model;
   console.log(`[api/chat] ✓ used=${usedModel}`);
 
   if (body.stream) {
