@@ -98,20 +98,6 @@ export default function App() {
     };
   }, []);
 
-  const handleGoogleLogin = async () => {
-    try {
-      setLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin },
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error('Login failed', err);
-      setError('Failed to sign in with Google. Please try again.');
-      setLoading(false);
-    }
-  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -313,14 +299,6 @@ export default function App() {
 
                     {authMode === 'login' && (
                       <div className="flex flex-col gap-6">
-                        <button
-                          onClick={handleGoogleLogin}
-                          className="w-full py-5 bg-white border border-gray-100 text-charcoal rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-sm active:scale-95 transition-all"
-                        >
-                          <BirdLogo className="w-5 h-5 text-sage" />
-                          Google Sync
-                        </button>
-
                         <button
                           onClick={() => setAuthMode('forgot')}
                           className="text-[10px] text-gray-300 font-black uppercase tracking-widest hover:text-sage transition-colors"
