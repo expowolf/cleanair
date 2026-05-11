@@ -80,7 +80,7 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
       const newPlan = await generatePersonalizedPlan(profile, specificGoal, context);
       const lastErr = (window as any).__cleanair_lastAIError;
       const aiInfo = (window as any).__cleanair_ai;
-      if (lastErr) setAiDebug(`AI failed: ${lastErr} | key=${aiInfo?.hasKey ? aiInfo.keyPrefix + '...' : 'MISSING'} model=${aiInfo?.model}`);
+      if (lastErr) setAiDebug(`AI failed: ${lastErr} | mode=${aiInfo?.mode || 'unknown'}`);
       // Persist locally first so it survives even if Firestore is blocked.
       try { localStorage.setItem(`plan:${auth.currentUser.uid}`, JSON.stringify(newPlan)); } catch {}
       try {
