@@ -1,76 +1,52 @@
-// AI client. Supports two providers — picks NVIDIA NIM when its key is set,
-// falls back to OpenRouter otherwise. Configure via Vercel env vars:
-//   VITE_NVIDIA_API_KEY (preferred)  + optional VITE_NVIDIA_MODEL
-//   VITE_OPENROUTER_API_KEY          + optional VITE_OPENROUTER_MODEL
-const env: any = (import.meta as any).env || {};
+// Browser-side AI client. Calls our own /api/chat Vercel serverless function,
+// which proxies to OpenRouter using a server-side OPENROUTER_API_KEY — the
+// key never reaches the user's browser.
 
-const nvidiaKey = (env.VITE_NVIDIA_API_KEY as string | undefined) || '';
-const openrouterKey = (env.VITE_OPENROUTER_API_KEY as string | undefined) || '';
+const PROXY_URL = '/api/chat';
 
-const provider: 'nvidia' | 'openrouter' = nvidiaKey ? 'nvidia' : 'openrouter';
-const apiKey = provider === 'nvidia' ? nvidiaKey : openrouterKey;
-
-const endpoint = provider === 'nvidia'
-  ? 'https://integrate.api.nvidia.com/v1/chat/completions'
-  : 'https://openrouter.ai/api/v1/chat/completions';
-
-const model = provider === 'nvidia'
-  ? ((env.VITE_NVIDIA_MODEL as string | undefined) || 'meta/llama-3.1-8b-instruct')
-  : ((env.VITE_OPENROUTER_MODEL as string | undefined) || 'openai/gpt-4o-mini');
-
-export const isAIAvailable = () => !!apiKey;
+// AI is "available" as long as we're running in a browser; the server validates
+// the key at request time and returns a clear error if it's missing.
+export const isAIAvailable = () => typeof window !== 'undefined';
 
 if (typeof window !== 'undefined') {
-  // Status only — don't log any portion of the key.
   // eslint-disable-next-line no-console
-  console.log(`[CleanAIr/AI] provider=${provider} hasKey=${!!apiKey} model=${model}`);
-  (window as any).__cleanair_ai = { provider, hasKey: !!apiKey, model };
+  console.log('[CleanAIr/AI] proxy mode enabled — using', PROXY_URL);
+  (window as any).__cleanair_ai = { mode: 'proxy', endpoint: PROXY_URL };
 }
 
 type Msg = { role: 'system' | 'user' | 'assistant'; content: string };
 
-export async function aiChat(messages: Msg[], opts: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
-  if (!apiKey) throw new Error('AI key missing. Set VITE_NVIDIA_API_KEY or VITE_OPENROUTER_API_KEY.');
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${apiKey}`,
-  };
-  if (provider === 'openrouter') {
-    headers['HTTP-Referer'] = typeof window !== 'undefined' ? window.location.origin : '';
-    headers['X-Title'] = 'CleanAIr';
-  }
-
-  const body: any = {
-    model,
-    messages,
-    max_tokens: opts.maxTokens ?? 600,
-    temperature: 0.8,
-    top_p: 0.95,
-  };
-  // NVIDIA's response_format support varies per model; only set on OpenRouter.
-  if (opts.json && provider === 'openrouter') {
-    body.response_format = { type: 'json_object' };
-  }
-
-  const res = await fetch(endpoint, {
+export async function aiChat(
+  messages: Msg[],
+  opts: { json?: boolean; maxTokens?: number; model?: string } = {}
+): Promise<string> {
+  const res = await fetch(PROXY_URL, {
     method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages,
+      json: !!opts.json,
+      maxTokens: opts.maxTokens ?? 800,
+      model: opts.model,
+    }),
   });
 
-  if (!res.ok) throw new Error(`AI ${provider} ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[CleanAIr/AI] proxy error', res.status, text);
+    throw new Error(`AI proxy ${res.status}: ${text.slice(0, 200)}`);
+  }
+
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? '';
 }
 
+// Returns parsed JSON; tolerates models that wrap JSON in markdown fences.
 export async function aiJSON<T>(messages: Msg[], maxTokens = 800): Promise<T> {
   const text = await aiChat(messages, { json: true, maxTokens });
-  // Some models wrap JSON in ```json ... ``` fences or include preamble.
   let cleaned = text.trim();
   const fence = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fence) cleaned = fence[1].trim();
-  // Extract first { ... } block as last resort
   if (cleaned[0] !== '{' && cleaned[0] !== '[') {
     const m = cleaned.match(/[{\[][\s\S]*[}\]]/);
     if (m) cleaned = m[0];
