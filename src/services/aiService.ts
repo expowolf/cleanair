@@ -21,11 +21,10 @@ const model = provider === 'nvidia'
 export const isAIAvailable = () => !!apiKey;
 
 if (typeof window !== 'undefined') {
+  // Status only — don't log any portion of the key.
   // eslint-disable-next-line no-console
-  console.log(
-    `[CleanAIr/AI] provider=${provider} key=${apiKey ? apiKey.slice(0, 10) + '...(' + apiKey.length + ' chars)' : 'MISSING'} model=${model}`
-  );
-  (window as any).__cleanair_ai = { provider, hasKey: !!apiKey, keyPrefix: apiKey.slice(0, 10), model };
+  console.log(`[CleanAIr/AI] provider=${provider} hasKey=${!!apiKey} model=${model}`);
+  (window as any).__cleanair_ai = { provider, hasKey: !!apiKey, model };
 }
 
 type Msg = { role: 'system' | 'user' | 'assistant'; content: string };

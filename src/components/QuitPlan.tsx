@@ -83,6 +83,10 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
       if (lastErr) setAiDebug(`AI failed: ${lastErr} | key=${aiInfo?.hasKey ? aiInfo.keyPrefix + '...' : 'MISSING'} model=${aiInfo?.model}`);
       // Persist locally first so it survives even if Firestore is blocked.
       try { localStorage.setItem(`plan:${auth.currentUser.uid}`, JSON.stringify(newPlan)); } catch {}
+      try {
+        const { patchUserDataBestEffort } = await import('../lib/userData');
+        patchUserDataBestEffort(auth.currentUser.uid, { plan: newPlan });
+      } catch {}
       // Best-effort Firestore write with 6s timeout.
       try {
         await Promise.race([
@@ -122,6 +126,10 @@ export default function QuitPlan({ profile }: QuitPlanProps) {
     const updatedPlan = { ...plan, tasks: updatedTasks };
     setPlan(updatedPlan);
     try { localStorage.setItem(`plan:${uid}`, JSON.stringify(updatedPlan)); } catch {}
+    try {
+      const { patchUserDataBestEffort } = await import('../lib/userData');
+      patchUserDataBestEffort(uid, { plan: updatedPlan });
+    } catch {}
 
     // Best-effort Firestore sync; non-blocking.
     Promise.race([

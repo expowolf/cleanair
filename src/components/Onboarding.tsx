@@ -50,6 +50,12 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       localStorage.setItem(`profile:${auth.currentUser.uid}`, JSON.stringify(finalProfile));
     } catch {}
 
+    // Cross-device sync via Supabase.
+    try {
+      const { patchUserDataBestEffort } = await import('../lib/userData');
+      patchUserDataBestEffort(auth.currentUser.uid, { profile: finalProfile });
+    } catch {}
+
     // Best-effort sync to Firestore with a 6s timeout so we don't hang forever.
     try {
       const write = setDoc(doc(db, 'users', auth.currentUser.uid), cleanObject(finalProfile));

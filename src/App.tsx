@@ -154,29 +154,30 @@ export default function App() {
   };
 
   const fetchProfile = async (u: User) => {
-    // Read localStorage first so users get into the app immediately even when
-    // Firestore reads/writes are blocked by rules.
+    // Try Supabase first (cross-device truth), then localStorage cache.
+    try {
+      const { loadUserData } = await import('./lib/userData');
+      const remote = await Promise.race([
+        loadUserData(u.id),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+      ]);
+      if (remote?.profile) {
+        setProfile(remote.profile as UserProfile);
+        try { localStorage.setItem(`profile:${u.id}`, JSON.stringify(remote.profile)); } catch {}
+        if (remote.plan) { try { localStorage.setItem(`plan:${u.id}`, JSON.stringify(remote.plan)); } catch {} }
+        setLoading(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('Supabase profile fetch failed', err);
+    }
+
+    // Fallback: localStorage cache from previous session on this device.
     try {
       const cached = localStorage.getItem(`profile:${u.id}`);
       if (cached) setProfile(JSON.parse(cached) as UserProfile);
     } catch {}
-
-    try {
-      const docRef = doc(db, 'users', u.id);
-      const docSnap = await Promise.race([
-        getDoc(docRef),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
-      ]);
-      if (docSnap && (docSnap as any).exists?.()) {
-        const data = (docSnap as any).data() as UserProfile;
-        setProfile(data);
-        try { localStorage.setItem(`profile:${u.id}`, JSON.stringify(data)); } catch {}
-      }
-    } catch (err) {
-      console.error('Fetch profile failed', err);
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
   };
 
   useEffect(() => {
