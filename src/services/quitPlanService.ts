@@ -101,9 +101,10 @@ export async function generatePersonalizedPlan(
     toast.warning('AI key missing — using template', { description: 'VITE_OPENROUTER_API_KEY not set in env.' });
   }
 
-  // Fallback: static template
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  const template = GOAL_TEMPLATES[specificGoal as string] || GOAL_TEMPLATES['generic'];
+  // Fallback: prefer a preset template; otherwise synthesize one that uses
+  // the user's actual goal text so custom goals don't get a generic plan.
+  const presetKey = Object.keys(GOAL_TEMPLATES).find((k) => k.toLowerCase() === (specificGoal || '').toLowerCase());
+  const template = presetKey ? GOAL_TEMPLATES[presetKey] : buildGoalTemplate(goal);
 
   return {
     userId: profile.uid,
@@ -137,6 +138,35 @@ export async function generatePersonalizedPlan(
     milestones: template.milestones.map((m: any) => ({ ...m, achieved: false })),
     status: 'active',
     goalContext: goalContext || null
+  };
+}
+
+// Build a template plan from a freeform goal string. Keeps the structure but
+// makes every task title YouTube-searchable by combining the goal with a
+// learning verb ("basics", "drill", "tutorial"). Means even when the AI is
+// down, a user who typed "build a drift car" still gets tasks like
+// "Build A Drift Car Basics" instead of a generic mindfulness routine.
+function buildGoalTemplate(rawGoal: string) {
+  const goal = (rawGoal || 'your goal').trim();
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // Pull a short focus phrase — first clause or first 6 words.
+  const phrase = cap(
+    goal.split(/[.,;:]/)[0].trim().split(/\s+/).slice(0, 6).join(' ')
+  );
+  return {
+    title: phrase.length <= 28 ? phrase : phrase.slice(0, 28),
+    whyItMatters: `Channeling the time and dopamine you'd spend on nicotine into ${goal} compounds fast.`,
+    milestones: [
+      { title: 'First Foundations', targetDays: 3 },
+      { title: 'Daily Habit Locked', targetDays: 7 },
+      { title: 'Real Progress', targetDays: 14 },
+      { title: phrase, targetDays: 30 },
+    ],
+    tasks: [
+      { id: 't1', title: `${phrase} Fundamentals`, description: `Spend 10 minutes learning the core fundamentals behind ${goal}.`, timeSlot: 'Morning', category: 'learning' },
+      { id: 't2', title: `${phrase} Practice Drill`, description: `Do one focused hands-on rep toward ${goal}.`, timeSlot: 'Midday', category: 'productivity' },
+      { id: 't3', title: `${phrase} Review`, description: `Reflect on what worked, log one lesson learned about ${goal}.`, timeSlot: 'Evening', category: 'habit' },
+    ],
   };
 }
 

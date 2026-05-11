@@ -152,19 +152,27 @@ export async function generatePlanWithAI(args: {
   cravingResponsePlan: string[];
   milestones: { title: string; targetDays: number }[];
 }> {
-  const sys = `You are CleanAIr, an evidence-based quit-coach. Generate a personalized 30-day quit plan as JSON only. Schema:
-{"title":"<= 6 words","whyItMatters":"1-2 sentences citing physiology/neuroscience","tasks":[{"id":"t1","title":"<= 6 words","description":"1 sentence","timeSlot":"Morning|Midday|Evening","category":"exercise|mindfulness|habit|learning|productivity"}],"habitReplacements":[{"trigger":"...","suggestion":"<= 12 words"}],"cravingResponsePlan":["step 1","step 2","step 3"],"milestones":[{"title":"<= 4 words","targetDays":3|7|14|30}]}
-Constraints: exactly 3 tasks (one per timeSlot), 3 habitReplacements, 3 cravingResponsePlan steps, 4 milestones at days 3/7/14/30. Tone: direct, motivating, not preachy.
-CRITICAL: each task.title MUST be a SPECIFIC, SEARCHABLE skill or activity that a user can paste into YouTube and get a relevant tutorial. BAD titles: "Logic Sprints", "Documentation Deep Dive", "Skill Building" (too vague — these return unrelated results). GOOD titles tie directly to the user's goal — e.g. for "Write a Book": "Outline Three Act Structure", "Grammar Comma Rules Practice", "Character Arc Workshop". For "Run a 5k": "30 Minute Beginner Run", "Hip Mobility Stretches", "Diaphragmatic Breathing Drill". For "Learn to Code": "Python For Loops Tutorial", "JavaScript Async Await Basics". Use real, googleable terminology from the goal's domain.`;
-  const user = `Goal: ${args.goal}
+  const sys = `You are CleanAIr, an evidence-based quit-coach. Output ONLY a JSON object, no prose. Schema:
+{"title":"<=6 words tied to user's goal","whyItMatters":"1 sentence","tasks":[{"id":"t1","title":"<=6 words SEARCHABLE skill","description":"1 sentence","timeSlot":"Morning","category":"exercise|mindfulness|habit|learning|productivity"}],"habitReplacements":[{"trigger":"...","suggestion":"<=10 words"}],"cravingResponsePlan":["s1","s2","s3"],"milestones":[{"title":"<=4 words","targetDays":3}]}
+Rules: exactly 3 tasks (Morning/Midday/Evening), 3 habitReplacements, 3 cravingResponsePlan, 4 milestones at days 3/7/14/30.
+TASK TITLES must be specific YouTube-searchable activities from the GOAL'S domain. Bad: "Skill Building". Good for "build a drift car": "MIG Welding Basics Tutorial". Good for "write a book": "Three Act Structure Outline". Be concrete.`;
+  const goalLine = args.goal.length > 200 ? args.goal.slice(0, 200) + '...' : args.goal;
+  const user = `Goal: ${goalLine}
 Substance: ${args.profile.nicotineType ?? 'nicotine'}
-Weekly spend: $${args.profile.weeklySpend ?? 0}
-Why quitting: ${args.profile.whyIQuit ?? 'health'}
-Method: ${args.profile.quitMethod ?? 'Cold Turkey'}
-Triggers: ${args.profile.triggers?.join(', ') ?? 'unspecified'}
-Motivation: ${args.profile.motivationLevel ?? 7}/10`;
-  return aiJSON([
-    { role: 'system', content: sys },
-    { role: 'user', content: user },
-  ], 2000);
+Why: ${(args.profile.whyIQuit ?? 'health').slice(0, 80)}
+Triggers: ${(args.profile.triggers || []).slice(0, 3).join(', ') || 'unspecified'}`;
+  // Retry once on failure — free models occasionally truncate or time out on
+  // the first try but succeed on the second with smaller max_tokens.
+  try {
+    return await aiJSON([
+      { role: 'system', content: sys },
+      { role: 'user', content: user },
+    ], 1200);
+  } catch (e) {
+    console.warn('[CleanAIr/AI] plan retry after error:', (e as Error).message);
+    return aiJSON([
+      { role: 'system', content: sys },
+      { role: 'user', content: user },
+    ], 900);
+  }
 }

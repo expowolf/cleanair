@@ -105,7 +105,7 @@ export default async function handler(req: Request): Promise<Response> {
   // This keeps us safely under Vercel's 25s Edge limit even if some free
   // models are completely unresponsive (sequential retries used to hit 504).
   const controllers = modelChain.map(() => new AbortController());
-  const PER_REQUEST_TIMEOUT = 20000;
+  const PER_REQUEST_TIMEOUT = 14000;
   const timers = controllers.map((c) => setTimeout(() => c.abort(), PER_REQUEST_TIMEOUT));
   const triedSummary: { model: string; status: number }[] = [];
 
