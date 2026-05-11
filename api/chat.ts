@@ -82,8 +82,9 @@ export default async function handler(req: Request): Promise<Response> {
   if (requested) chain.push(requested);
   if (envModel && !chain.includes(envModel)) chain.push(envModel);
   for (const id of live) if (!chain.includes(id)) chain.push(id);
-  // Hard cap so a runaway chain can't blow the function budget.
-  const modelChain = chain.slice(0, 10);
+  // Hard cap on attempts so total time stays under Vercel's 25s Edge limit
+  // (each attempt gets ~10s, so 3 attempts max = 30s worst case but most return faster).
+  const modelChain = chain.slice(0, 3);
 
   if (modelChain.length === 0) {
     return json({ error: 'No models available. OpenRouter catalog returned empty list.' }, 502);
@@ -100,7 +101,7 @@ export default async function handler(req: Request): Promise<Response> {
     const openrouterBody: Record<string, unknown> = {
       model,
       messages: body.messages,
-      max_tokens: body.maxTokens ?? 800,
+      max_tokens: Math.min(body.maxTokens ?? 800, 1800),
       temperature: 0.7,
       stream: !!body.stream,
     };
@@ -111,6 +112,9 @@ export default async function handler(req: Request): Promise<Response> {
 
     console.log(`[api/chat] → model=${model} msgs=${body.messages.length} stream=${!!body.stream}`);
 
+    // Per-model timeout so one slow model can't burn the whole 25s Vercel budget.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 18000);
     try {
       upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -121,11 +125,18 @@ export default async function handler(req: Request): Promise<Response> {
           'X-Title': 'CleanAIr',
         },
         body: JSON.stringify(openrouterBody),
+        signal: controller.signal,
       });
     } catch (err: any) {
-      console.error('[api/chat] fetch threw:', err?.message || err);
+      clearTimeout(timer);
+      const isTimeout = err?.name === 'AbortError';
+      console.error(`[api/chat] ${model} ${isTimeout ? 'timed out' : 'fetch threw'}:`, err?.message || err);
+      triedSummary.push({ model, status: isTimeout ? 504 : 0 });
+      lastErrorText = JSON.stringify({ error: isTimeout ? 'Upstream timeout' : String(err?.message || err) });
+      if (isTimeout) continue;
       return json({ error: 'Network error reaching OpenRouter.', detail: String(err?.message || err) }, 502);
     }
+    clearTimeout(timer);
 
     if (upstream.ok) { usedModel = model; break; }
 
