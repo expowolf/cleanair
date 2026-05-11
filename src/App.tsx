@@ -154,22 +154,24 @@ export default function App() {
   };
 
   const fetchProfile = async (u: User) => {
+    console.log('[CleanAIr] fetchProfile start for uid=', u.id);
     let remote: any = null;
     try {
-      const { loadUserData, patchUserDataBestEffort } = await import('./lib/userData');
+      const { loadUserData, patchUserData } = await import('./lib/userData');
       remote = await Promise.race([
         loadUserData(u.id),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+        new Promise<null>((resolve) => setTimeout(() => { console.warn('[CleanAIr] Supabase loadUserData timed out'); resolve(null); }, 5000)),
       ]);
+      console.log('[CleanAIr] Supabase remote =', remote ? Object.keys(remote) : 'null');
       if (remote?.profile) {
+        console.log('[CleanAIr] Hydrating profile from Supabase ✓');
         setProfile(remote.profile as UserProfile);
         try { localStorage.setItem(`profile:${u.id}`, JSON.stringify(remote.profile)); } catch {}
         if (remote.plan) { try { localStorage.setItem(`plan:${u.id}`, JSON.stringify(remote.plan)); } catch {} }
         setLoading(false);
         return;
       }
-      // No remote row yet — if we have local data, push it up so the OTHER
-      // device can pull it next time it logs in.
+      // No remote row yet — push local data up if we have any.
       try {
         const cachedProfile = localStorage.getItem(`profile:${u.id}`);
         const cachedPlan = localStorage.getItem(`plan:${u.id}`);
@@ -177,15 +179,19 @@ export default function App() {
         if (cachedProfile) patch.profile = JSON.parse(cachedProfile);
         if (cachedPlan) patch.plan = JSON.parse(cachedPlan);
         if (patch.profile || patch.plan) {
-          patchUserDataBestEffort(u.id, patch);
-          console.log('[userData] uploaded local data to Supabase for cross-device sync');
+          console.log('[CleanAIr] Uploading local data to Supabase (keys:', Object.keys(patch), ')');
+          await patchUserData(u.id, patch);
+          console.log('[CleanAIr] Upload complete ✓');
+        } else {
+          console.log('[CleanAIr] No local data to upload and no remote row — fresh user on fresh device');
         }
-      } catch {}
+      } catch (err) {
+        console.error('[CleanAIr] Local-to-Supabase uplift failed', err);
+      }
     } catch (err) {
-      console.warn('Supabase profile fetch failed', err);
+      console.error('[CleanAIr] Supabase profile fetch failed', err);
     }
 
-    // Fallback: render from localStorage so the user gets in immediately.
     try {
       const cached = localStorage.getItem(`profile:${u.id}`);
       if (cached) setProfile(JSON.parse(cached) as UserProfile);
@@ -193,17 +199,8 @@ export default function App() {
     setLoading(false);
   };
 
-  useEffect(() => {
-    if (!user) return;
-    const unsubscribe = onSnapshot(
-      doc(db, 'users', user.id),
-      (d) => {
-        if (d.exists()) setProfile(d.data() as UserProfile);
-      },
-      (err) => handleFirestoreError(err, OperationType.GET, `users/${user.id}`)
-    );
-    return () => unsubscribe();
-  }, [user]);
+  // Firestore listener removed — Supabase is the source of truth now and the
+  // Firestore rules reject Supabase tokens, which only produced noise.
 
   const renderContent = () => {
     if (!profile) return null;

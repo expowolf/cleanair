@@ -14,26 +14,33 @@ export type UserData = {
 };
 
 export async function loadUserData(uid: string): Promise<UserData | null> {
+  console.log('[userData] loading row for', uid);
   const { data, error } = await supabase
     .from(TABLE)
     .select('data')
     .eq('user_id', uid)
     .maybeSingle();
   if (error) {
-    console.warn('[userData] load failed', error.message);
+    console.error('[userData] LOAD FAILED:', error.code, error.message, error.details, error.hint);
     return null;
   }
+  console.log('[userData] load result:', data ? 'row found' : 'no row');
   return (data?.data as UserData) || null;
 }
 
 // Merge-patch the user's data row. Reads current, merges, upserts.
 export async function patchUserData(uid: string, patch: Partial<UserData>): Promise<void> {
+  console.log('[userData] patching keys:', Object.keys(patch));
   const current = (await loadUserData(uid)) || {};
   const merged: UserData = { ...current, ...patch };
   const { error } = await supabase
     .from(TABLE)
     .upsert({ user_id: uid, data: merged, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-  if (error) console.warn('[userData] patch failed', error.message);
+  if (error) {
+    console.error('[userData] PATCH FAILED:', error.code, error.message, error.details, error.hint);
+  } else {
+    console.log('[userData] patch saved ✓');
+  }
 }
 
 // Best-effort sync with a hard timeout so UI never hangs.
