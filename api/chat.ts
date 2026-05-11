@@ -44,7 +44,7 @@ export default async function handler(req: Request): Promise<Response> {
     return json({ error: 'messages[] is required.' }, 400);
   }
 
-  const model = body.model || process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+  const model = body.model || process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free';
 
   // Build OpenRouter request
   const openrouterBody: Record<string, unknown> = {
