@@ -404,8 +404,8 @@ export default function CraveButton() {
                       className="absolute inset-0 rounded-full bg-sage/5 border-2 border-sage/20"
                     />
 
-                    {/* Progress Circle */}
-                    <svg className="absolute inset-0 w-full h-full -rotate-90">
+                    {/* Progress Circle — viewBox so it scales with the container at any size */}
+                    <svg viewBox="0 0 320 320" className="absolute inset-0 w-full h-full -rotate-90">
                       <motion.circle
                         cx="160" cy="160" r="150"
                         stroke="currentColor" strokeWidth="10" fill="transparent"
