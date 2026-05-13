@@ -19,7 +19,7 @@ import Community from './components/Community';
 import Learn from './components/Learn';
 import { motion, AnimatePresence } from 'motion/react';
 import { Toaster } from 'sonner';
-import { Mail, Lock, User as UserIcon, ArrowLeft } from 'lucide-react';
+import { Mail, Lock, User as UserIcon, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { BirdLogo } from './components/Branding';
 
 import { Routes, Route, useLocation } from 'react-router-dom';
@@ -48,6 +48,7 @@ export default function App() {
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const location = useLocation();
@@ -104,9 +105,11 @@ export default function App() {
     setAuthError(null);
     setLoading(true);
     try {
+      // Normalize email so trailing spaces / capitalisation don't lock people out.
+      const cleanEmail = email.trim().toLowerCase();
       if (authMode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: cleanEmail,
           password,
           options: {
             emailRedirectTo: window.location.origin,
@@ -115,20 +118,17 @@ export default function App() {
         });
         if (error) throw error;
         if (!data.session) {
-          setAuthError('Check your email to confirm your account, then sign in.');
+          setAuthError("Almost done — check your email and click the confirmation link, then come back and sign in.");
         }
-        // Note: profile is created by Onboarding once the user is authenticated.
-        // We don't write to Firestore here because the Supabase session does not
-        // satisfy Firestore security rules.
       } else if (authMode === 'login') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
         if (error) throw error;
       } else if (authMode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
           redirectTo: window.location.origin,
         });
         if (error) throw error;
-        setAuthError('Password reset email sent!');
+        setAuthError('Reset link sent — check your inbox.');
         setAuthMode('login');
       }
     } catch (err: any) {
@@ -240,11 +240,11 @@ export default function App() {
                       <div className="text-sage drop-shadow-md">
                         <BirdLogo className="w-24 h-24 mx-auto mb-6" />
                       </div>
-                      <h1 className="text-3xl font-black text-charcoal mb-2 tracking-tight uppercase">
-                        {authMode === 'login' ? 'Auth Required' : authMode === 'signup' ? 'Initialization' : 'Recovery'}
+                      <h1 className="text-3xl font-black text-charcoal mb-2 tracking-tight">
+                        {authMode === 'login' ? 'Welcome back' : authMode === 'signup' ? 'Create account' : 'Reset password'}
                       </h1>
-                      <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest">
-                        {authMode === 'login' ? 'Protocol Delta-9 Authentication' : authMode === 'signup' ? 'Establish Secure Node' : 'Transmission Reset'}
+                      <p className="text-gray-500 text-sm font-medium">
+                        {authMode === 'login' ? 'Sign in to continue your journey.' : authMode === 'signup' ? 'Sign up with your email and a password.' : "We'll email you a reset link."}
                       </p>
                     </div>
 
@@ -254,11 +254,12 @@ export default function App() {
                           <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                           <input
                             type="text"
-                            placeholder="FULL NAME"
+                            placeholder="Full name"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
+                            autoComplete="name"
                             required
-                            className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-[24px] border-none text-xs font-bold focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-300"
+                            className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-[24px] border-none text-sm font-medium focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-400"
                           />
                         </div>
                       )}
@@ -266,34 +267,53 @@ export default function App() {
                         <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input
                           type="email"
-                          placeholder="EMAIL ADDRESS"
+                          inputMode="email"
+                          autoCapitalize="none"
+                          autoCorrect="off"
+                          spellCheck={false}
+                          autoComplete={authMode === 'signup' ? 'email' : 'username'}
+                          placeholder="Email address"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
-                          className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-[24px] border-none text-xs font-bold focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-300"
+                          className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-[24px] border-none text-sm font-medium focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-400"
                         />
                       </div>
                       {authMode !== 'forgot' && (
                         <div className="relative">
                           <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                           <input
-                            type="password"
-                            placeholder="SECURITY KEY"
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                            minLength={authMode === 'signup' ? 6 : undefined}
                             required
-                            className="w-full pl-14 pr-6 py-5 bg-gray-50 rounded-[24px] border-none text-xs font-bold focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-300"
+                            className="w-full pl-14 pr-14 py-5 bg-gray-50 rounded-[24px] border-none text-sm font-medium focus:ring-2 focus:ring-sage transition-all placeholder:text-gray-400"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-charcoal p-1"
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
                         </div>
                       )}
+                      {authMode === 'signup' && (
+                        <p className="text-[11px] text-gray-400 px-2">Use at least 6 characters. Make sure to confirm your email after signing up.</p>
+                      )}
 
-                      {authError && <p className="text-[10px] text-red-500 font-black uppercase tracking-widest mt-2">{authError}</p>}
+                      {authError && <p className="text-sm text-red-500 font-semibold mt-2 px-2">{authError}</p>}
 
                       <button
                         type="submit"
-                        className="w-full py-5 bg-charcoal text-white rounded-[24px] text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-charcoal/20 active:scale-95 transition-all mt-4"
+                        disabled={loading}
+                        className="w-full py-5 bg-charcoal text-white rounded-[24px] text-sm font-bold shadow-xl shadow-charcoal/20 active:scale-95 transition-all mt-4 disabled:opacity-50"
                       >
-                        {authMode === 'login' ? 'Access Portal' : authMode === 'signup' ? 'Finalize Profile' : 'Send Link'}
+                        {loading ? 'Please wait…' : authMode === 'login' ? 'Sign in' : authMode === 'signup' ? 'Create account' : 'Send reset link'}
                       </button>
                     </form>
 
@@ -301,22 +321,22 @@ export default function App() {
                       <div className="flex flex-col gap-6">
                         <button
                           onClick={() => setAuthMode('forgot')}
-                          className="text-[10px] text-gray-300 font-black uppercase tracking-widest hover:text-sage transition-colors"
+                          className="text-sm text-gray-500 font-semibold hover:text-sage transition-colors"
                         >
-                          Reset Permissions?
+                          Forgot password?
                         </button>
                       </div>
                     )}
 
                     <div className="mt-12 pt-8 border-t border-gray-50">
                       {authMode === 'login' ? (
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-widest">
-                          New operative?{' '}
-                          <button onClick={() => setAuthMode('signup')} className="text-sage font-black">Register</button>
+                        <p className="text-sm text-gray-500 font-medium">
+                          New here?{' '}
+                          <button onClick={() => setAuthMode('signup')} className="text-sage font-bold">Create an account</button>
                         </p>
                       ) : (
-                        <button onClick={() => setAuthMode('login')} className="flex items-center justify-center gap-2 text-xs text-gray-400 font-black uppercase tracking-widest mx-auto">
-                          <ArrowLeft size={16} /> Identity Verification
+                        <button onClick={() => setAuthMode('login')} className="flex items-center justify-center gap-2 text-sm text-gray-500 font-semibold mx-auto">
+                          <ArrowLeft size={16} /> Back to sign in
                         </button>
                       )}
                     </div>
