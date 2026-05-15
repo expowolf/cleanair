@@ -118,7 +118,15 @@ export default function App() {
         });
         if (error) throw error;
         if (!data.session) {
-          setAuthError("Almost done — check your email and click the confirmation link, then come back and sign in.");
+          // Try to sign straight in — works if Supabase "Confirm email" is off.
+          // If confirmation is required they'll get a friendly prompt instead of
+          // being blocked at the door.
+          const { error: loginErr } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+          if (loginErr) {
+            setAuthError("Check your email for a confirmation link, then sign in. You can also verify later from Settings.");
+          }
+          // Either way, don't hard-block — the auth state change listener will
+          // update the UI when/if the session comes in.
         }
       } else if (authMode === 'login') {
         const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
@@ -349,6 +357,22 @@ export default function App() {
               </div>
             ) : (
               <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
+                {user && !user.email_confirmed_at && (
+                  <div className="mx-4 mt-3 px-4 py-3 bg-orange/10 border border-orange/20 rounded-2xl flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-orange-700 flex-1">
+                      Please verify your email to secure your account.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        await supabase.auth.resend({ type: 'signup', email: user.email! });
+                        alert('Confirmation email resent — check your inbox.');
+                      }}
+                      className="text-xs font-bold text-orange-700 underline shrink-0"
+                    >
+                      Resend
+                    </button>
+                  </div>
+                )}
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeTab}
